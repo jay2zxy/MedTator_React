@@ -98,3 +98,132 @@
 - 周期：18周 → 8周
 - 目录层级：3-4层 → 2层
 - work.md 改名为 reload.md
+
+---
+
+## Session 1.3
+
+**时间**: 2026-02-11
+**主要目标**: M1收尾（调试空白页、原版深度分析、更新reload.md）
+
+### 完成的工作
+
+1. **修复Vite空白页问题**
+   - 现象：`npm run dev` 无报错，但 localhost:5174 页面空白
+   - 浏览器控制台报错：`RibbonMenu.tsx:11 Uncaught SyntaxError: The requested module '/src/store.ts' does not provide an export named 'TabKey'`
+   - 原因：Vite/esbuild 会剥离 `export type` 声明，`import { useAppStore, TabKey }` 在运行时找不到 TabKey
+   - 修复：将 `import { useAppStore, TabKey }` 拆为 `import { useAppStore }` + `import type { TabKey }`
+   - 结果：界面正常显示，7个Tab切换正常
+
+2. **原版Flask项目深度分析**
+   - Flask服务器（web.py）几乎无用：只有一个路由 `/`，渲染index.html + 注入sample数据，无后端API
+   - Vue实例（app_hotpot.js）：巨型对象，vpp_data含30+属性，Tab切换用 `v-show`
+   - 文件操作（fs_helper.js）：浏览器 File System Access API（showOpenFilePicker/showSaveFilePicker）
+   - 7个ext模块对应7个Tab，行数从75行（export）到1314行（error analysis）
+   - 4个解析器是纯函数无DOM依赖，最适合先移植
+
+3. **更新reload.md架构设计**
+   - 新增原版架构深度分析（Flask角色、vpp_data详情、ext模块表格、数据流图）
+   - 更新M1任务状态（标记已完成项、Electron推迟到M7）
+   - 调整M3策略（先用浏览器file input，不依赖Electron）
+   - 添加Session 1.3开发日志
+
+### 技术问题与解决
+
+**问题**: `export type` 在Vite中的import方式
+- Vite使用esbuild做转译，esbuild在处理TypeScript时会剥离type-only exports
+- 必须使用 `import type { X }` 而非 `import { X }` 来导入纯类型
+- 这是TypeScript + esbuild的已知行为
+
+### 当前文件状态
+
+- `RibbonMenu.tsx` — 修复了TabKey导入方式
+- `store.ts` — Zustand store，含TabKey类型 + AppState（currentTab, dtd, anns, annIdx, cm）
+- `App.tsx` — 主组件，7个Tab条件渲染
+- `components/` — 8个组件文件（RibbonMenu + 7个Tab占位组件）
+- `reload.md` — 更新了架构分析和M1状态
+
+### 下一步
+
+M2-解析器移植（已在Session 2.1完成）
+
+---
+
+## Session 2.1
+
+**时间**: 2026-02-11
+**主要目标**: M2-解析器移植 + Annotation Tab布局对齐
+
+### 完成的工作
+
+1. **Annotation Tab 布局对齐原版**
+   - 对照原版Flask截图，重写 `Annotation.tsx`
+   - 工具栏Ribbon：8个分组（Schema File / Annotation File / Display Mode / Search / Entity Marks / Link Marks / Hint Marks / Help）
+   - 上半区(60%)：文件列表面板(250px, Sort/Filter/分页) + CodeMirror编辑器占位
+   - 下半区(40%)：Tag定义列表(Entity Tags + Link Tags) + 标注表格(Tag/ID/Spans/Text/Attributes)
+   - 纯布局骨架，功能后续接入
+
+2. **M2-解析器移植（4个parser → TypeScript）**
+   - 读完原版4个JS解析器（共2966行），分析依赖关系
+   - 新建 `types.ts`：共享类型定义（Dtd, DtdTag, DtdAttr, Ann, AnnTag, BratDocData, BratColData等）
+   - `parsers/dtd-parser.ts` ← dtd_parser.js (1092行)：Schema解析（DTD/JSON/YAML三种格式）+ 序列化
+   - `parsers/ann-parser.ts` ← ann_parser.js (1085行)：标注XML解析/序列化 + Hint字典 + span/loc工具函数
+   - `parsers/brat-parser.ts` ← brat_parser.js (560行)：BRAT格式转换 + 颜色管理 + collection/document数据
+   - `parsers/bioc-parser.ts` ← bioc_parser.js (229行)：BioC XML生成/导出
+   - 安装依赖：js-yaml + @types/js-yaml
+   - TypeScript编译零错误
+
+3. **迁移技术处理**
+   - `var` → `const`/`let`，添加TypeScript类型
+   - `.contains()` → `.includes()`（原版用了非标准方法）
+   - `typeof(x)=='undefined'` → 默认参数
+   - 对象方法模式 → 导出函数
+   - `require('xml-formatter')` → 简单内联格式化
+   - `saveAs()` (FileSaver全局) → 原生 `URL.createObjectURL` 下载
+   - `jsyaml` 全局变量 → `import yaml from 'js-yaml'`
+   - 跳过 `pretty_xml_str`（依赖jQuery）和 `get_subtags_of_substr_in_ann`（依赖nlp_toolkit），后续需要时再加
+
+### Parser在项目中的角色
+
+```
+用户拖入.dtd → dtd-parser.parse() → store.dtd → 所有Tab可工作
+用户拖入.xml → ann-parser.xml2ann() → store.anns → 文件列表/编辑器显示
+编辑器可视化 → brat-parser.makeDocumentData() → BRAT渲染
+导出BioC → bioc-parser.anns2xml() → 下载XML
+```
+
+Parser是数据入口，M3接上文件操作后整个数据流就通了。
+
+### 未完成
+
+- 未用sample/数据实际验证parser输出（等M3文件操作接上后自然验证）
+
+### 当前文件状态
+
+```
+MedTator-React/src/
+├── App.tsx              # 主组件，7个Tab条件渲染
+├── main.tsx             # 入口
+├── store.ts             # Zustand store
+├── types.ts             # ✅ 新增：共享类型定义
+├── index.css            # 全局样式
+├── components/
+│   ├── RibbonMenu.tsx   # 顶部Tab菜单
+│   ├── Annotation.tsx   # ✅ 重写：对齐原版布局（Ribbon+文件列表+编辑器+Tag列表+标注表格）
+│   ├── Statistics.tsx   # 占位
+│   ├── Export.tsx       # 占位
+│   ├── Adjudication.tsx # 占位
+│   ├── Converter.tsx    # 占位
+│   ├── ErrorAnalysis.tsx# 占位
+│   └── Toolkit.tsx      # 占位
+└── parsers/             # ✅ 新增：4个解析器
+    ├── dtd-parser.ts    # Schema解析（DTD/JSON/YAML）
+    ├── ann-parser.ts    # 标注XML解析/序列化
+    ├── brat-parser.ts   # BRAT格式转换
+    └── bioc-parser.ts   # BioC XML生成
+```
+
+### 下一步
+
+M3-状态管理+文件操作：完善store.ts + 实现文件拖拽加载 → 打通parser到UI的数据流
+
