@@ -13,11 +13,12 @@
 
 **当前问题**: jQuery + Vue 2.6 混合架构，700KB 代码无模块化，全局变量，难以维护
 
-**重构目标**: React 18 + TypeScript + Vite，现代化架构，类型安全，高性能
+**重构目标**: 功能完全一致，打包成桌面App可随时使用
 
 **技术栈**:
 - React 18 + TypeScript + Vite
 - Zustand (状态) + Ant Design (UI)
+- Electron (桌面打包，替代浏览器File System Access API)
 - brat 封装 + ECharts + JSZip
 
 ---
@@ -70,137 +71,201 @@ MedTator/  (Git 仓库根目录)
 ├── sample/                  # 示例数据 (8个数据集, 135文件, 564K)
 ├── scripts/                 # Python 工具脚本 (12个)
 │
-└── MedTator-React/          # React 版本（待开发）
-    └── (空)
+└── MedTator-React/          # React 版本（开发中）
+    ├── node_modules/        # 176个依赖包
+    ├── public/              # 公共静态资源
+    ├── src/                 # 源代码（待开发）
+    ├── package.json         # 依赖配置
+    ├── vite.config.ts       # Vite配置
+    ├── tsconfig.json        # TypeScript配置
+    └── index.html           # 入口HTML
 ```
 
 
 ---
 
-### 📋 待开发模块
+## 🏗️ 架构设计（简化版）
 
-#### 【基础】M1-项目搭建 (3天)
-- [ ] Vite + React + TypeScript 初始化
-- [ ] Ant Design 集成
-- [ ] ESLint + Prettier 配置
-- [ ] 基础布局 (Ribbon Menu/Content 双栏结构)
-- [ ] React Router 配置
+### 设计原则
 
-#### 【基础】M2-数据类型 (2天)
-- [ ] Entity/Relation/Annotation 类型定义
-- [ ] Schema/DTD 数据结构
-- [ ] 与原版数据格式对齐 (参照 app_hotpot.js vpp_data)
+- **功能一致** - 和原版一模一样，能用就行
+- **结构简单** - 扁平目录，不搞过度嵌套
+- **打包成App** - 最终用 Electron 打包成桌面应用
 
-#### 【基础】M3-解析器集合 (5天) ⬆ 提前：纯函数，可独立测试
-- [ ] ann_parser.js → TypeScript (1085行, 最核心)
-- [ ] dtd_parser.js → TypeScript (1092行)
-- [ ] brat_parser.js → TypeScript (560行)
-- [ ] bioc_parser.js → TypeScript (229行)
-- [ ] 用 sample/ 数据集做兼容性测试 (golden test)
+### 原版架构要点（照着抄的参照物）
 
-#### 【基础】M4-状态管理 (2天)
-- [ ] Zustand stores (annotation/schema/file/ui)
-- [ ] 持久化中间件
-- [ ] 状态同步逻辑
+- 单页应用，Ribbon Menu + 7个Tab切换（state控制，不用路由）
+- 纯前端，无后端API
+- `app_hotpot.vpp_data` 是全局状态（一个大对象）
+- 文件操作用 File System Access API → 改成 Electron的 Node.js fs
 
-#### 【核心】M5-文件系统 (3天)
-- [ ] File System Access API 封装 (参照 fs_helper.js 417行)
-- [ ] 文件导入/导出逻辑
-- [ ] ZIP 文件处理 (JSZip)
+### React目录结构
 
-#### 【核心】M6-brat 封装 (3天)
-- [ ] BratVisualizer React 组件
-- [ ] brat 初始化逻辑
-- [ ] 事件桥接 (React ↔ brat)
-- [ ] 数据同步
+```
+MedTator-React/src/
+├── App.tsx                  # 主组件，Tab切换
+├── main.tsx                 # 入口
+├── store.ts                 # Zustand，一个文件搞定全局状态
+├── types.ts                 # 类型定义，一个文件够用
+│
+├── components/              # 所有组件扁平放
+│   ├── RibbonMenu.tsx       # 顶部菜单（对应Metro UI Ribbon）
+│   ├── FileList.tsx         # 文件列表
+│   ├── Editor.tsx           # CodeMirror封装
+│   ├── BratViewer.tsx       # BRAT可视化封装
+│   ├── SchemaEditor.tsx     # Schema编辑器
+│   ├── Statistics.tsx       # 统计面板
+│   ├── Export.tsx           # 导出
+│   ├── Adjudication.tsx     # IAA裁决
+│   ├── Converter.tsx        # 格式转换
+│   ├── ErrorAnalysis.tsx    # 错误分析
+│   └── Toolkit.tsx          # 工具集
+│
+├── parsers/                 # 解析器（从原版直接移植）
+│   ├── ann-parser.ts
+│   ├── dtd-parser.ts
+│   ├── brat-parser.ts
+│   └── bioc-parser.ts
+│
+└── utils/                   # 工具函数
+    ├── file-helper.ts       # 文件操作（Electron fs）
+    └── iaa-calculator.ts    # IAA算法
+```
 
-#### 【核心】M7-标注编辑器 (15天) ⭐ 最重要，最复杂
-- [ ] 文本显示组件
-- [ ] 文本选择逻辑
-- [ ] 实体标注 UI (上下文菜单、标签选择)
-- [ ] 关系标注 UI (连线、属性编辑)
-- [ ] 快捷键系统
-- [ ] 撤销/重做
-- [ ] 对应原版: app_hotpot.js (3795行) + 多个 ext 模块 + 模板
+### 技术映射
 
-#### 【功能】M8-Schema 编辑器 (4天)
-- [ ] DTD 编辑器 (对应 ext_codemirror 1048行 + ext_se 379行)
-- [ ] 可视化配置界面
-- [ ] Schema 验证
+| 原版 | React版 |
+|------|---------|
+| Metro UI Ribbon | Ant Design Menu |
+| Vue 2.6 v-show切Tab | React state + 条件渲染 |
+| app_hotpot.vpp_data | Zustand store（一个文件） |
+| CodeMirror 5 | @uiw/react-codemirror |
+| BRAT可视化 | useEffect封装原JS |
+| File System Access API | Electron Node.js fs |
+| JSZip + FileSaver | 保持不变 |
+| jQuery DOM操作 | React状态驱动 |
 
-#### 【功能】M9-语料库管理 (3天)
-- [ ] 文件列表组件 (对应 ext_texts 118行)
-- [ ] 批量操作
-- [ ] 分页显示
+### 砍掉的东西
 
-#### 【功能】M10-IAA 计算器 (4天)
-- [ ] Cohen's Kappa 算法 (对应 iaa_calculator 1965行)
-- [ ] F1 Score 计算
-- [ ] 多标注者对比界面 (对应 ext_iaa 738行)
+- ~~React Router~~ → 不需要，state切Tab就行
+- ~~ESLint + Prettier~~ → 不搞规范
+- ~~单元测试 + E2E测试~~ → 不写测试
+- ~~性能优化（虚拟列表、代码分割）~~ → 先能用再说
+- ~~多slice状态管理~~ → 一个store.ts搞定
+- ~~深层目录嵌套~~ → 扁平结构
 
-#### 【功能】M11-Razer 裁决工具 (5天)
-- [ ] 差异可视化 (对应 error_analyzer 682行)
-- [ ] 裁决流程 (对应 ext_razer 1314行)
-- [ ] 批量裁决
+---
 
-#### 【功能】M12-统计分析 (3天)
-- [ ] 语料库统计 (对应 stat_helper 402行 + ext_statistics 118行)
-- [ ] ECharts 图表集成
-- [ ] 报表生成
+### 📋 模块任务（简化为8个）
 
-#### 【功能】M13-工具集 (3天)
-- [ ] IOB2 编辑器 (对应 iob_helper 44行)
-- [ ] 格式转换器 (对应 ext_converter 418行)
-- [ ] MedTagger 可视化 (对应 medtagger_toolkit 234行)
+#### M1-项目搭建 (2天) - 进行中
+- [x] Vite + React + TypeScript 初始化 (✅ 2026-02-11)
+- [ ] 安装 Ant Design + Zustand
+- [ ] RibbonMenu + Tab切换布局
+- [ ] Electron 基础集成
 
-#### 【优化】M14-性能优化 (3天)
-- [ ] 代码分割和懒加载
-- [ ] 虚拟化列表 (react-window)
-- [ ] Bundle 分析优化
+#### M2-解析器移植 (4天)
+- [ ] ann_parser → TypeScript (1085行)
+- [ ] dtd_parser → TypeScript (1092行)
+- [ ] brat_parser → TypeScript (560行)
+- [ ] bioc_parser → TypeScript (229行)
+- [ ] 用sample/数据验证
 
-#### 【优化】M15-测试部署 (3天)
-- [ ] 单元测试 (Vitest)
-- [ ] E2E 测试 (Playwright)
-- [ ] GitHub Pages 部署
+#### M3-状态管理 + 文件操作 (3天)
+- [ ] store.ts (对应vpp_data)
+- [ ] Electron文件读写 (对应fs_helper.js 417行)
+- [ ] ZIP打包
+
+#### M4-标注编辑器 (12天) ⭐ 核心
+- [ ] 文件列表 + CodeMirror编辑器
+- [ ] 实体标注（选中文本 → 创建标签）
+- [ ] 关系标注（连线 + 属性）
+- [ ] BRAT可视化封装
+- [ ] 快捷键
+- [ ] 对应原版: app_hotpot.js (3795行) + ext模块
+
+#### M5-Schema编辑器 (3天)
+- [ ] DTD编辑器 (CodeMirror)
+- [ ] Schema验证
+
+#### M6-其他功能Tab (6天)
+- [ ] Statistics (统计 + ECharts)
+- [ ] Export (导出)
+- [ ] Adjudication (IAA + 裁决)
+- [ ] Converter (格式转换)
+- [ ] Error Analysis
+- [ ] Toolkit
+
+#### M7-Electron打包 (2天)
+- [ ] 主进程 + 预加载脚本
+- [ ] 文件系统权限
+- [ ] 打包成 .exe / .dmg
+
+#### M8-联调修bug (3天)
+- [ ] 功能对齐检查
+- [ ] 修bug
 
 ---
 
 ## 📊 开发时间线
 
-**Week 1-2**: M1→M2 (项目搭建 + 类型定义)
-**Week 3-4**: M3 (解析器迁移 + golden test 验证)
-**Week 5**: M4→M5 (状态管理 + 文件系统)
-**Week 6-7**: M6 (brat 封装)
-**Week 8-11**: M7 (标注编辑器，核心主战场)
-**Week 12-14**: M8→M9→M10 (功能模块 1-3)
-**Week 15-16**: M11→M12→M13 (功能模块 4-6)
-**Week 17-18**: M14→M15 (优化上线)
+**Week 1**: M1 项目搭建 + M2 解析器移植
+**Week 2-3**: M3 状态+文件 + M4 标注编辑器（开始）
+**Week 4-5**: M4 标注编辑器（完成）
+**Week 6-7**: M5 Schema + M6 其他功能Tab
+**Week 8**: M7 Electron打包 + M8 联调修bug
 
-**总计**: 18 周 / 15 个模块
+**总计**: 8 周 / 8 个模块（比之前砍了一半）
 
 ---
 
 ## 🎯 当前状态
 
-**正在做**: 熟悉原版代码，确保原版可正常运行
-**下一步**: 开始 M1-项目搭建 (在 MedTator-React/ 下初始化)
-**进度**: 0/15 模块 (0%)
+**正在做**: M1-项目搭建（已完成Vite初始化）
+**下一步**: 安装 Ant Design + Zustand，搭建Tab切换布局
+**进度**: 1/8 模块 (M1进行中)
 
 ---
 
 ## 📝 开发日志
 
-### 2026-02-11 - 项目启动
+### 2026-02-11 - Session 1.1 项目启动与架构设计
+
+**上午 - 环境搭建**：
 - ✅ Fork 原项目到个人仓库
 - ✅ 创建 jay-dev 开发分支
 - ✅ 搭建 Python 虚拟环境
-- ✅ 原版应用成功运行
-- ✅ 创建工作文档 work.md
-- 📊 代码分析：35个JS文件 (18807行) + 23个HTML模板 (11031行)
+- ✅ 原版应用成功运行（Flask http://localhost:8086）
+- ✅ 创建工作文档 work.md（后改名为 reload.md）
+
+**下午 - 代码分析**：
+- 📊 代码量统计：35个JS文件 (18807行) + 23个HTML模板 (11031行)
 - 📊 核心文件：app_hotpot.js (3795行) + 13个扩展模块 (~6500行)
 - 📊 解析器：ann(1085行) + dtd(1092行) + brat(560行) + bioc(229行)
-- 🎯 确定重构策略：brat 封装而非重写，原版代码保持不动
+- 🏗️ 架构分析：单页应用（7个Tab）、巨型Vue实例、File System Access API
+- 🎯 确定重构策略：brat封装而非重写，原版代码保持不动
+
+**晚上 - React项目初始化**：
+- ✅ 使用Vite创建React 18 + TypeScript项目
+- ✅ 安装176个依赖包
+- ✅ 验证开发服务器运行（http://localhost:5173）
+- ✅ Git提交："vite init" (e9c5464)
+- 🏗️ 完成React架构设计文档
 - 🔧 修正重构计划：解析器提前到 M3，标注编辑器调整为 15天，总周期 18周
+
+**技术决策**：
+- 目录结构：保持根目录不变 + 新建MedTator-React/
+- 状态管理：Zustand（一个store.ts搞定）
+- Tab切换：不用路由，state条件渲染
+- UI框架：Ant Design替代Metro UI
+- 桌面打包：Electron（替代浏览器File System Access API）
+
+### Session 1.2 - 架构简化
+
+- 🔧 砍掉过度设计：React Router、ESLint/Prettier、测试、多slice状态管理
+- 🔧 模块从15个精简为8个，周期从18周压缩到8周
+- 🔧 加入Electron桌面打包方案
+- 🔧 目录结构改为扁平（components/下直接放组件）
 
 ### 待更新...
 
@@ -228,4 +293,4 @@ cd MedTator-React && npm run dev
 
 ---
 
-*最后更新: 2026-02-11*
+*最后更新: 2026-02-11 Session 1.1*
