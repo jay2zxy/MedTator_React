@@ -2,7 +2,7 @@
  * BRAT standoff format annotation file parser
  * Migrated from templates/js/brat_parser.js
  */
-import type { Dtd, Ann, AnnTag, BratDocData, BratColData, BratEntity } from '../types'
+import type { Dtd, AnnTag, BratDocData, BratColData } from '../types'
 import { spans2locs } from './ann-parser'
 
 // ── Color management ──
@@ -21,7 +21,7 @@ export function resetColorMapping(): void {
 }
 
 export function getColor(name: string): string {
-  if (!colorMapping[name]) {
+  if (!colorMapping.hasOwnProperty(name)) {
     const nAssigned = Object.keys(colorMapping).length
     if (nAssigned < COLORS.length) {
       colorMapping[name] = COLORS[nAssigned]
@@ -86,6 +86,30 @@ function parseAnnLineTypeText(line: string): [string, string, number[][], string
   return [id, type, locs, token]
 }
 
+// ── Ann → brat format (stub, incomplete in original) ──
+
+export function ann2brat(ann: any, dtd: Dtd): string[] {
+  const cnt = { T: 0, R: 0, A: 0 }
+  const idMapping: Record<string, string> = {}
+  const rs: string[] = []
+
+  for (const tag of ann.tags) {
+    let newID: string | null = null
+    if (dtd.tag_dict[tag.tag]?.type === 'etag') {
+      cnt.T++
+      newID = 'T' + cnt.T
+    } else if (dtd.tag_dict[tag.tag]?.type === 'rtag') {
+      cnt.R++
+      newID = 'R' + cnt.R
+    }
+    if (newID) idMapping[tag.id] = newID
+
+    // TODO: build actual brat output rows (original was also incomplete)
+  }
+
+  return rs
+}
+
 // ── MedTagger output → brat format ──
 
 interface MedTaggerRecord {
@@ -111,9 +135,9 @@ export function medtagger2brat(
     colData.entity_attribute_types!.push({
       type: 'Certainty',
       values: {
-        Positive: { glyph: '+', glyphColor: 'red' },
-        Negated: { glyph: '-', glyphColor: 'green' },
-        Hypothetical: { glyph: '?', glyphColor: 'orange' },
+        Positive: { glyph: '➕', glyphColor: 'red' },
+        Negated: { glyph: '➖', glyphColor: 'green' },
+        Hypothetical: { glyph: '❓', glyphColor: 'orange' },
         Possible: { glyph: '%', glyphColor: 'yellow' },
       },
     })
@@ -141,7 +165,7 @@ export function medtagger2brat(
   for (let i = 0; i < annRs.length; i++) {
     const r = annRs[i]
 
-    if (!normDict[r.norm]) {
+    if (!normDict.hasOwnProperty(r.norm)) {
       const bgColor = getColor(r.norm)
       const entDef = {
         type: r.norm,
@@ -161,21 +185,21 @@ export function medtagger2brat(
       [[parseInt(r.start), parseInt(r.end)]],
     ])
 
-    if (flagAttrs.certainty && r.certainty) {
+    if (flagAttrs.certainty) {
       docData.attributes!.push([
         'A' + docData.attributes!.length,
         'Certainty',
         entityId,
-        r.certainty,
+        r.certainty ?? '',
       ])
     }
 
-    if (flagAttrs.status && r.status) {
+    if (flagAttrs.status) {
       docData.attributes!.push([
         'A' + docData.attributes!.length,
         'Status',
         entityId,
-        r.status,
+        r.status ?? '',
       ])
     }
   }

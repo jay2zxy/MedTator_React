@@ -5,7 +5,7 @@
 import yaml from 'js-yaml'
 import type { Dtd, DtdTag, DtdAttr } from '../types'
 
-const NON_CONSUMING_SPANS = '-1~-1'
+export const NON_CONSUMING_SPANS = '-1~-1'
 
 // ── Factory functions ──
 
@@ -210,16 +210,21 @@ function getAttrValues(line: string): string[] {
 
 function getAttrRequire(line: string): string[] {
   const regex = /#([A-Z]+)+(\b["a-zA-Z0-9\-\_\ ]+|\>)/gm
-  const m = regex.exec(line)
-  if (!m) return []
+  let ret: string[] = []
+  let m: RegExpExecArray | null
 
-  const values: string[] = []
-  if (m[1]) values.push(m[1])
-  if (m[2]) {
-    let t = m[2].replaceAll('"', '').replaceAll('>', '').trim()
-    values.push(t)
+  while ((m = regex.exec(line)) !== null) {
+    if (m.index === regex.lastIndex) regex.lastIndex++
+    const values: string[] = []
+    if (m[1]) values.push(m[1])
+    if (m[2]) {
+      const t = m[2].replaceAll('"', '').replaceAll('>', '').trim()
+      values.push(t)
+    }
+    ret = values
   }
-  return values
+
+  return ret
 }
 
 function getAttrPrefix(line: string): string | null {
@@ -287,17 +292,17 @@ export function parseYaml(text: string): Dtd | null {
 // ── Shared JSON/YAML parser ──
 
 function mkAttrByTmpAttr(tag: any, tmpAttr: any): DtdAttr | null {
-  if (!tmpAttr.name || !tmpAttr.vtype) return null
+  if (!tmpAttr.hasOwnProperty('name') || !tmpAttr.hasOwnProperty('vtype')) return null
 
   const attr = mkBaseAttr(tag.name, tmpAttr.name, tmpAttr.vtype)
-  if (tmpAttr.require) attr.require = tmpAttr.require
-  if (tmpAttr.values) attr.values = tmpAttr.values
+  if (tmpAttr.hasOwnProperty('require')) attr.require = tmpAttr.require
+  if (tmpAttr.hasOwnProperty('values')) attr.values = tmpAttr.values
   if (tmpAttr.default_value !== undefined) attr.default_value = tmpAttr.default_value
   return attr
 }
 
 function parseTmpDtd(tmp: any): Dtd | null {
-  if (!tmp || !tmp.name) {
+  if (!tmp || !tmp.hasOwnProperty('name')) {
     console.log('* missing name in the given schema')
     return null
   }

@@ -200,8 +200,8 @@ export function ann2xml(ann: Ann, dtd: Dtd): XMLDocument {
   }
   root.appendChild(nodeTags)
 
-  // META node
-  if (ann.meta) {
+  // META node — only create if ann has meta property with content
+  if (ann.hasOwnProperty('meta') && ann.meta && Object.keys(ann.meta).length > 0) {
     const nodeMeta = xmlDoc.createElement('META')
     for (const key in ann.meta) {
       for (const obj of ann.meta[key]) {
