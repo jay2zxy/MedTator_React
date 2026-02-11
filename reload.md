@@ -92,12 +92,50 @@ MedTator/  (Git 仓库根目录)
 - **结构简单** - 扁平目录，不搞过度嵌套
 - **打包成App** - 最终用 Electron 打包成桌面应用
 
-### 原版架构要点（照着抄的参照物）
+### 原版架构深度分析
 
-- 单页应用，Ribbon Menu + 7个Tab切换（state控制，不用路由）
-- 纯前端，无后端API
-- `app_hotpot.vpp_data` 是全局状态（一个大对象）
-- 文件操作用 File System Access API → 改成 Electron的 Node.js fs
+**Flask 服务器 (web.py) — 几乎啥都没干：**
+- 只有一个路由 `/`，渲染 index.html 并注入 sample 数据
+- 没有任何后端 API，100% 纯前端应用
+- Flask 本质就是个静态文件服务器，可以被任何 HTTP server 替代
+
+**Vue 实例 (app_hotpot.js) — 一个巨型对象：**
+- `new Vue({ el: '#app_hotpot', data: vpp_data, methods: vpp_methods })`
+- `vpp_data` 全局状态含 30+ 属性（section, dtd, anns, ann_idx, cm, cfg, texts, hints, is_linking...）
+- Tab 切换：`switch_mui(section)` 改变 `this.section`，HTML 用 `v-show` 显示/隐藏
+
+**文件操作 (fs_helper.js) — 浏览器 File System Access API：**
+- `showOpenFilePicker()` → 用户选文件 → `getFile().text()` 读内容
+- `showSaveFilePicker()` → `createWritable()` 写文件
+- 每次都需要用户手动选择，无法直接访问文件系统
+- → Electron 替代后可直接用 Node.js fs，体验更好
+
+**7个Tab对应的扩展模块：**
+
+| Tab | 扩展模块 | 行数 | 核心功能 |
+|-----|---------|------|---------|
+| Annotation | ext_codemirror.js | 1,048 | CodeMirror编辑器+标注 |
+| Statistics | ext_statistics.js | 118 | 语料库统计 |
+| Export | ext_exporter.js | 75 | 导出格式 |
+| Adjudication | ext_iaa.js | 738 | 标注者间一致性 |
+| Converter | ext_converter.js | 418 | 格式转换 |
+| Error Analysis | ext_razer.js | 1,314 | NLP错误分析 |
+| Toolkit | ext_toolkit.js | 282 | NLP工具集 |
+
+**4个解析器 — 纯函数，无DOM依赖：**
+- dtd_parser.js (1092行) — Schema定义解析（DTD/JSON/YAML）
+- ann_parser.js (1085行) — 标注XML/TXT解析
+- brat_parser.js (560行) — BRAT格式转换
+- bioc_parser.js (229行) — BioC XML格式转换
+
+**第三方库依赖 (docs/static/lib/)：**
+- CodeMirror, BRAT可视化, D3, ECharts, JSZip, FileSaver, PapaParse, Compromise(NLP)
+
+**数据流：**
+```
+用户选文件 → fs_helper → parser解析 → vpp_data(全局状态) → Vue渲染UI
+用户编辑标注 → vpp_data更新 → Vue重渲染 → 保存时fs_helper写回文件
+```
 
 ### React目录结构
 
@@ -158,23 +196,23 @@ MedTator-React/src/
 
 ### 📋 模块任务（简化为8个）
 
-#### M1-项目搭建 (2天) - 进行中
+#### M1-项目搭建 (2天) - 基本完成
 - [x] Vite + React + TypeScript 初始化 (✅ 2026-02-11)
-- [ ] 安装 Ant Design + Zustand
-- [ ] RibbonMenu + Tab切换布局
-- [ ] Electron 基础集成
+- [x] 安装 Ant Design + Zustand (✅ 2026-02-11)
+- [x] RibbonMenu + Tab切换布局 (✅ 2026-02-11)
+- [ ] Electron 基础集成（推迟到M7，先做功能）
 
 #### M2-解析器移植 (4天)
-- [ ] ann_parser → TypeScript (1085行)
-- [ ] dtd_parser → TypeScript (1092行)
-- [ ] brat_parser → TypeScript (560行)
-- [ ] bioc_parser → TypeScript (229行)
+- [ ] dtd_parser → TypeScript (1092行，纯函数，最先搬)
+- [ ] ann_parser → TypeScript (1085行，纯函数)
+- [ ] brat_parser → TypeScript (560行，纯函数)
+- [ ] bioc_parser → TypeScript (229行，纯函数)
 - [ ] 用sample/数据验证
 
 #### M3-状态管理 + 文件操作 (3天)
-- [ ] store.ts (对应vpp_data)
-- [ ] Electron文件读写 (对应fs_helper.js 417行)
-- [ ] ZIP打包
+- [ ] store.ts 完善（对应vpp_data 30+属性）
+- [ ] 浏览器文件操作（先用input+drag&drop，Electron后面再换）
+- [ ] ZIP打包（JSZip）
 
 #### M4-标注编辑器 (12天) ⭐ 核心
 - [ ] 文件列表 + CodeMirror编辑器
@@ -221,9 +259,9 @@ MedTator-React/src/
 
 ## 🎯 当前状态
 
-**正在做**: M1-项目搭建（已完成Vite初始化）
-**下一步**: 安装 Ant Design + Zustand，搭建Tab切换布局
-**进度**: 1/8 模块 (M1进行中)
+**已完成**: M1-项目搭建（Vite + Ant Design + Zustand + Tab切换布局）
+**下一步**: M2-解析器移植（4个parser → TypeScript）
+**进度**: 1/8 模块完成，M2准备开始
 
 ---
 
@@ -266,6 +304,20 @@ MedTator-React/src/
 - 🔧 模块从15个精简为8个，周期从18周压缩到8周
 - 🔧 加入Electron桌面打包方案
 - 🔧 目录结构改为扁平（components/下直接放组件）
+
+### Session 1.3 - 原版深度分析 + M1收尾
+
+**新发现**：
+- Flask 服务器几乎无用，只serve静态页面 + 注入sample数据，无后端API
+- vpp_data 全局状态含30+属性，需要完整搬到store.ts
+- 7个Tab各对应一个ext模块，行数差异大（75行~1314行）
+- 4个parser是纯函数无DOM依赖，最适合先移植
+- Electron集成推迟到M7，先用浏览器file input做文件操作
+
+**决策调整**：
+- M1的Electron集成推迟 → 先做核心功能，最后打包
+- M3文件操作先用浏览器方案（input+drag&drop），不依赖Electron
+- 修复了RibbonMenu的TabKey类型导入问题（import type）
 
 ### 待更新...
 
