@@ -271,3 +271,52 @@ MedTator-React/src/
 ### 下一步
 
 M3-状态管理+文件操作：完善store.ts + 实现文件拖拽加载 → 打通parser到UI的数据流
+
+---
+
+## Session 3.1 — M3 Step 1: store.ts 状态设计
+
+**时间**: 2026-02-12
+**分支**: jay-dev
+**模型**: Opus 4.6
+
+### 完成的工作
+
+1. **原版状态全量梳理**
+   - 扫描 app_hotpot.js 的 vpp_data（30行~175行）+ 11个ext模块
+   - 统计出原版共 96+ 个状态属性
+   - 筛选出 M3 需要的 16 个属性 + 14 个 actions
+
+2. **重写 store.ts（40行 → 169行）**
+   - 用 `types.ts` 的真实类型（`Dtd`, `Ann`）替代 `any`
+   - 新增导出类型：`SortAnnsBy`（6种排序）、`CmSettings`（7个编辑器选项）
+
+   **状态分组：**
+   | 分组 | 属性 | Actions |
+   |------|------|---------|
+   | Tab | `currentTab` | `setCurrentTab` |
+   | Schema | `dtd` | `setDtd` |
+   | 标注文件 | `anns`, `annIdx` | `setAnns`, `setAnnIdx`, `addAnns`, `removeAnn`, `clearAnns` |
+   | 文件列表 | `sortAnnsBy`, `fnPattern`, `pgIndex`, `pgNumPerPage` | `setSortAnnsBy`, `setFnPattern`, `setPgIndex` |
+   | Tag过滤 | `displayTagName` | `setDisplayTagName` |
+   | 加载进度 | `isLoadingAnns`, `nAnnsDropped/Loaded/Error`, `msgLoadingAnns` | `startLoading`, `updateLoading`, `finishLoading` |
+   | CM设置 | `cm`（7个选项） | `setCm` |
+
+   **关键设计决策：**
+   - `setAnns` 自动重置 `annIdx=0` + `pgIndex=0`
+   - `addAnns` 增量追加不覆盖（适配异步批量加载）
+   - `removeAnn` 自动修正 `annIdx`（删除后不越界）
+   - 排序/过滤变更时自动 `pgIndex=0`
+   - Loading 三阶段：`start` → `update` → `finish`
+   - 未来模块状态（hints、linking、IAA、razer等）等到对应模块时再加
+
+### 验证
+
+- TypeScript 编译 ✅ 零错误
+- IDE 诊断 ✅ 零问题
+- 67个解析器测试 ✅ 全部通过
+- 现有组件（RibbonMenu、App.tsx）不受影响
+
+### 下一步
+
+M3 Step 2: 文件操作（file-helper + 拖拽 + parser接入 + UI更新）— 切回 Sonnet
