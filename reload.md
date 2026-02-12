@@ -163,7 +163,12 @@ MedTator-React/src/
 │   ├── ann-parser.ts
 │   ├── dtd-parser.ts
 │   ├── brat-parser.ts
-│   └── bioc-parser.ts
+│   ├── bioc-parser.ts
+│   └── __tests__/           # Vitest 单元测试
+│       ├── dtd-parser.test.ts
+│       ├── ann-parser.test.ts
+│       ├── brat-parser.test.ts
+│       └── bioc-parser.test.ts
 │
 └── utils/                   # 工具函数
     ├── file-helper.ts       # 文件操作（Electron fs）
@@ -187,7 +192,8 @@ MedTator-React/src/
 
 - ~~React Router~~ → 不需要，state切Tab就行
 - ~~ESLint + Prettier~~ → 不搞规范
-- ~~单元测试 + E2E测试~~ → 不写测试
+- ~~E2E测试~~ → 不写端到端测试
+- 单元测试：Vitest + jsdom（仅覆盖解析器等核心逻辑）
 - ~~性能优化（虚拟列表、代码分割）~~ → 先能用再说
 - ~~多slice状态管理~~ → 一个store.ts搞定
 - ~~深层目录嵌套~~ → 扁平结构
@@ -202,12 +208,14 @@ MedTator-React/src/
 - [x] RibbonMenu + Tab切换布局 (✅ 2026-02-11)
 - [ ] Electron 基础集成（推迟到M7，先做功能）
 
-#### M2-解析器移植 (4天)
-- [ ] dtd_parser → TypeScript (1092行，纯函数，最先搬)
-- [ ] ann_parser → TypeScript (1085行，纯函数)
-- [ ] brat_parser → TypeScript (560行，纯函数)
-- [ ] bioc_parser → TypeScript (229行，纯函数)
-- [ ] 用sample/数据验证
+#### M2-解析器移植 (4天) - ✅ 已完成
+- [x] dtd_parser → TypeScript (1092行)
+- [x] ann_parser → TypeScript (1085行)
+- [x] brat_parser → TypeScript (560行)
+- [x] bioc_parser → TypeScript (229行)
+- [x] 代码审查（逐函数对照原版，修复9个问题）
+- [x] 单元测试：Vitest + jsdom，67个测试全部通过
+- [x] 用sample/数据验证（DTD解析、roundtrip、BRAT数据生成）
 
 #### M3-状态管理 + 文件操作 (3天)
 - [ ] store.ts 完善（对应vpp_data 30+属性）
@@ -259,9 +267,9 @@ MedTator-React/src/
 
 ## 🎯 当前状态
 
-**已完成**: M1-项目搭建（Vite + Ant Design + Zustand + Tab切换布局）
-**下一步**: M2-解析器移植（4个parser → TypeScript）
-**进度**: 1/8 模块完成，M2准备开始
+**已完成**: M1-项目搭建 + M2-解析器移植（含67个单元测试）
+**下一步**: M3-状态管理+文件操作（打通parser到UI的数据流）
+**进度**: 2/8 模块完成
 
 ---
 
@@ -338,11 +346,16 @@ MedTator-React/src/
 source venv/Scripts/activate && python web.py
 # 访问: http://localhost:8086
 
-# React 版运行（待创建）
+# React 版运行
 cd MedTator-React && npm run dev
 # 访问: http://localhost:5173
+
+# 跑单元测试
+cd MedTator-React && npm test
+# 监听模式
+cd MedTator-React && npm run test:watch
 ```
 
 ---
 
-*最后更新: 2026-02-11 Session 1.1*
+*最后更新: 2026-02-11 Session 2.1*

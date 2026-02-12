@@ -194,9 +194,16 @@ M2-解析器移植（已在Session 2.1完成）
 
 Parser是数据入口，M3接上文件操作后整个数据流就通了。
 
-### 未完成
-
-- 未用sample/数据实际验证parser输出（等M3文件操作接上后自然验证）
+4. **引入单元测试（Vitest + jsdom）**
+   - 安装 vitest + jsdom（happy-dom 不支持 XML DOM，已卸载）
+   - vite.config.ts 添加 `test: { environment: 'jsdom' }`
+   - package.json 添加 `npm test`（单次）和 `npm run test:watch`（监听模式）
+   - 4个测试文件，67个测试全部通过：
+     - `dtd-parser.test.ts`（17个）：DTD/JSON/YAML解析、roundtrip、工厂函数、边界情况
+     - `ann-parser.test.ts`（30个）：span工具、xml2ann、ann2xml roundtrip、tag工具、hint字典、hash
+     - `brat-parser.test.ts`（14个）：颜色管理、parseAnn、collection/document数据、medtagger
+     - `bioc-parser.test.ts`（6个）：BioC XML生成、entity/relation/多文档/空列表
+   - sample/ 目录的真实 DTD 数据也通过了验证
 
 ### 当前文件状态
 
@@ -220,7 +227,12 @@ MedTator-React/src/
     ├── dtd-parser.ts    # Schema解析（DTD/JSON/YAML）
     ├── ann-parser.ts    # 标注XML解析/序列化
     ├── brat-parser.ts   # BRAT格式转换
-    └── bioc-parser.ts   # BioC XML生成
+    ├── bioc-parser.ts   # BioC XML生成
+    └── __tests__/       # ✅ 新增：单元测试（67个，全部通过）
+        ├── dtd-parser.test.ts
+        ├── ann-parser.test.ts
+        ├── brat-parser.test.ts
+        └── bioc-parser.test.ts
 ```
 
 ### M2 代码审查与修复
