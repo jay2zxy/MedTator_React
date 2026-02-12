@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(taskkill:*)",
-      "Bash(npm create vite@latest:*)",
-      "Bash(npm install:*)"
-    ]
-  }
-}

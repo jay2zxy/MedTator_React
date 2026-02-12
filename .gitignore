@@ -146,3 +146,6 @@ vpp_data_DELI.json
 
 # IDE
 .idea/
+
+# Claude Code local settings
+.claude/settings.local.json
