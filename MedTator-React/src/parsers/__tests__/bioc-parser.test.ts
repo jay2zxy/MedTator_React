@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { anns2xml, xml2str } from '../bioc-parser'
 import { xml2ann } from '../ann-parser'
 import { parseDtd } from '../dtd-parser'
-import type { Ann } from '../../types'
 
 // ── Sample data ──
 

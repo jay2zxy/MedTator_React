@@ -143,6 +143,41 @@ interface AppState {
 
 **下一步**：M3 Step 2 - 文件操作（file-helper + 拖拽 + parser接入 + UI更新）
 
+### 2026-02-12 - Session 3.2 M3 Step 2: 文件操作
+
+**核心功能实现**：
+- ✅ 创建 `utils/file-helper.ts` (75行)：文件读取、类型检查、下载工具
+- ✅ 重写 `Annotation.tsx` (305行 → 500+行)：
+  - Schema 加载：拖拽 + 文件选择器，支持 .dtd/.json/.yaml
+  - Annotation 加载：批量加载 .xml/.txt，显示 loading 进度
+  - 文件列表：显示、排序(6种)、过滤、分页(100/页)、点击切换
+  - 编辑器：显示当前文件文本（暂用 textarea 占位）
+  - Tag 列表：显示 DTD 的 Entity/Relation Tags，支持点击过滤
+  - 标注表格：显示当前文件标注(Tag/ID/Spans/Text/Attributes)，支持 Tag 过滤
+- ✅ 数据流打通：文件拖拽 → Parser解析 → Store更新 → UI自动刷新
+- ✅ 错误处理：文件类型检查、解析失败提示、错误计数
+
+**测试验证**：
+- ✅ 生成测试文件：`test-schema.dtd` (3 Entity + 2 Relation) + `test-annotation.xml` (7 个标注)
+- ✅ 功能手动测试：Schema 加载、Annotation 加载、Tag 过滤、文件切换 - 全部正常
+- ✅ TypeScript 编译零错误
+- ✅ 67 个 parser 测试全部通过
+
+**修复问题**：
+- 🐛 清理未使用 imports（Annotation.tsx、测试文件）
+- 🐛 `ann-parser.ts` 参数重命名（`dtd` → `_dtd`）
+
+**技术决策**：
+- 🎯 暂时不用 CodeMirror（M4 再集成标注功能）
+- 🎯 Tags/Tags_r/Label 排序未实现（标记 TODO）
+- 🎯 使用 useMemo 优化列表过滤/排序
+
+**进度**：M3 完成 2.5/3 步骤（83%）
+
+**下一步选择**：
+- 选项 1: M3 Step 3 - ZIP 打包功能
+- 选项 2: 跳到 M4 - 标注编辑器（CodeMirror + 实体/关系标注）
+
 ---
 
 *最后更新: 2026-02-12*

@@ -266,7 +266,7 @@ export interface HintTagInfo {
 
 export type HintDict = Record<string, HintTagInfo>
 
-export function anns2hintDict(dtd: Dtd, anns: Ann[]): HintDict {
+export function anns2hintDict(_dtd: Dtd, anns: Ann[]): HintDict {
   const hintDict: HintDict = {}
   for (const ann of anns) {
     for (const tag of ann.tags) {

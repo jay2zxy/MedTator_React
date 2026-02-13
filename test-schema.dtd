@@ -1,0 +1,32 @@
+<!ENTITY name "MEDICAL_SYMPTOMS">
+
+<!-- Entity: Symptom -->
+<!ELEMENT SYMPTOM ( #PCDATA ) >
+<!ATTLIST SYMPTOM certainty ( positive | negated | possible ) #IMPLIED "positive" >
+<!ATTLIST SYMPTOM severity ( mild | moderate | severe ) #IMPLIED >
+<!ATTLIST SYMPTOM comment CDATA "NA" >
+
+<!-- Entity: Medication -->
+<!ELEMENT MEDICATION ( #PCDATA ) >
+<!ATTLIST MEDICATION dosage CDATA #IMPLIED >
+<!ATTLIST MEDICATION frequency CDATA #IMPLIED >
+<!ATTLIST MEDICATION comment CDATA "NA" >
+
+<!-- Entity: Disease -->
+<!ELEMENT DISEASE ( #PCDATA ) >
+<!ATTLIST DISEASE status ( current | history | family_history ) #IMPLIED "current" >
+<!ATTLIST DISEASE comment CDATA "NA" >
+
+<!-- Relation: Symptom-Disease Link -->
+<!ELEMENT LK_SYMPTOM_DISEASE EMPTY >
+<!ATTLIST LK_SYMPTOM_DISEASE arg0 IDREF prefix="SYMPTOM" #IMPLIED>
+<!ATTLIST LK_SYMPTOM_DISEASE arg1 IDREF prefix="DISEASE" #IMPLIED>
+<!ATTLIST LK_SYMPTOM_DISEASE relation_type ( caused_by | indicates | associated_with ) #IMPLIED "associated_with" >
+<!ATTLIST LK_SYMPTOM_DISEASE comment CDATA "NA" >
+
+<!-- Relation: Medication-Disease Link -->
+<!ELEMENT LK_MED_DISEASE EMPTY >
+<!ATTLIST LK_MED_DISEASE arg0 IDREF prefix="MEDICATION" #IMPLIED>
+<!ATTLIST LK_MED_DISEASE arg1 IDREF prefix="DISEASE" #IMPLIED>
+<!ATTLIST LK_MED_DISEASE relation_type ( treats | prevents | worsens ) #IMPLIED "treats" >
+<!ATTLIST LK_MED_DISEASE comment CDATA "NA" >
