@@ -19,6 +19,8 @@ import { useAppStore } from '../store'
 import { readFileAsText, isSchemaFile, isAnnotationFile } from '../utils/file-helper'
 import { parse as parseDtd } from '../parsers/dtd-parser'
 import { xml2ann, txt2ann } from '../parsers/ann-parser'
+import { assignTagColors } from '../editor/cm-theme'
+import AnnotationEditor from './AnnotationEditor'
 
 /* ── 工具栏 Ribbon ── */
 function ToolbarRibbon() {
@@ -28,6 +30,8 @@ function ToolbarRibbon() {
   const startLoading = useAppStore(state => state.startLoading)
   const updateLoading = useAppStore(state => state.updateLoading)
   const finishLoading = useAppStore(state => state.finishLoading)
+  const cm = useAppStore(state => state.cm)
+  const setCm = useAppStore(state => state.setCm)
 
   const schemaInputRef = useRef<HTMLInputElement>(null)
   const annInputRef = useRef<HTMLInputElement>(null)
@@ -50,6 +54,7 @@ function ToolbarRibbon() {
         return
       }
 
+      assignTagColors(parsed)
       setDtd(parsed)
       message.success(`Schema loaded: ${parsed.name}`)
     } catch (error) {
@@ -179,7 +184,7 @@ function ToolbarRibbon() {
 
       {/* Display Mode */}
       <ToolbarGroup label="Display Mode">
-        <Radio.Group size="small" defaultValue="document">
+        <Radio.Group size="small" value={cm.displayMode} onChange={e => setCm({ displayMode: e.target.value })}>
           <Radio.Button value="document">Document</Radio.Button>
           <Radio.Button value="sentences">Sentences</Radio.Button>
         </Radio.Group>
@@ -196,9 +201,9 @@ function ToolbarRibbon() {
 
       {/* Entity Marks */}
       <ToolbarGroup label="Entity Marks">
-        <Radio.Group size="small" defaultValue="color-id">
-          <Radio.Button value="color-id">Color + ID</Radio.Button>
-          <Radio.Button value="color-only">Color Only</Radio.Button>
+        <Radio.Group size="small" value={cm.markMode} onChange={e => setCm({ markMode: e.target.value })}>
+          <Radio.Button value="node">Color + ID</Radio.Button>
+          <Radio.Button value="span">Color Only</Radio.Button>
         </Radio.Group>
       </ToolbarGroup>
 
@@ -206,10 +211,10 @@ function ToolbarRibbon() {
       <ToolbarGroup label="Link Marks">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Switch size="small" defaultChecked /> <span>Show Links</span>
+            <Switch size="small" checked={cm.enabledLinks} onChange={v => setCm({ enabledLinks: v })} /> <span>Show Links</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Switch size="small" defaultChecked /> <span>Show Lines</span>
+            <Switch size="small" checked={cm.enabledLinkComplex} onChange={v => setCm({ enabledLinkComplex: v })} /> <span>Show Lines</span>
           </div>
         </div>
       </ToolbarGroup>
@@ -217,9 +222,15 @@ function ToolbarRibbon() {
       {/* Hint Marks */}
       <ToolbarGroup label="Hint Marks">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <Radio.Group size="small" defaultValue="no-hint">
-            <Radio.Button value="simple-hint">Simple Hint</Radio.Button>
-            <Radio.Button value="no-hint"><StopOutlined /> No Hint</Radio.Button>
+          <Radio.Group size="small" value={cm.enabledHints ? cm.hintMode : 'off'} onChange={e => {
+            if (e.target.value === 'off') {
+              setCm({ enabledHints: false })
+            } else {
+              setCm({ enabledHints: true, hintMode: e.target.value })
+            }
+          }}>
+            <Radio.Button value="simple">Simple Hint</Radio.Button>
+            <Radio.Button value="off"><StopOutlined /> No Hint</Radio.Button>
           </Radio.Group>
           <Button size="small" icon={<CheckOutlined />}>Accept All</Button>
         </div>
@@ -405,57 +416,6 @@ function FileListPanel() {
           onClick={() => setPgIndex(pgIndex + 1)}
         />
       </div>
-    </div>
-  )
-}
-
-/* ── 编辑器面板 ── */
-function EditorPanel() {
-  const anns = useAppStore(state => state.anns)
-  const annIdx = useAppStore(state => state.annIdx)
-
-  const currentAnn = annIdx !== null ? anns[annIdx] : null
-
-  return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      fontFamily: 'monospace',
-      fontSize: 13,
-      position: 'relative',
-      background: '#fafafa',
-    }}>
-      {currentAnn ? (
-        <textarea
-          readOnly
-          value={currentAnn.text}
-          style={{
-            flex: 1,
-            padding: 8,
-            fontFamily: 'Consolas, Monaco, monospace',
-            fontSize: 13,
-            border: 'none',
-            outline: 'none',
-            resize: 'none',
-            background: '#fff',
-          }}
-        />
-      ) : (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          color: '#ccc',
-          fontSize: 14,
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <EditOutlined style={{ fontSize: 40, display: 'block', marginBottom: 12 }} />
-            {anns.length === 0 ? 'No files loaded' : 'Select a file to view'}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -652,7 +612,7 @@ export default function Annotation() {
       {/* 上半区: 文件列表 + 编辑器 (60%) */}
       <div style={{ flex: 6, display: 'flex', minHeight: 0, borderBottom: '5px solid #e9e9e9' }}>
         <FileListPanel />
-        <EditorPanel />
+        <AnnotationEditor />
       </div>
 
       {/* 下半区: Tag列表 + 标注表格 (40%) */}

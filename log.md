@@ -191,6 +191,44 @@ interface AppState {
 
 **下一步**：M4 标注编辑器 - CodeMirror 集成 + 实体/关系标注 + BRAT 可视化
 
+### 2026-02-12 - Session 4.1 M4 Phase 1: Store 扩展 + Tag Helper
+
+**提交**: 8abb46a（Sonnet 4.5）
+
+- ✅ 新建 `utils/tag-helper.ts` (98行)：makeEtag、makeEmptyEtagByDef、makeEmptyRtagByDef、getIdrefAttrs
+- ✅ 扩展 `store.ts` (169→298行)：tag增删改 + selectedTagId + 关系链接状态机
+- ✅ 新建 `utils/__tests__/tag-helper.test.ts` (8个测试)
+- ✅ 75个测试全部通过
+
+### 2026-02-13 - Session 4.2 M4 Phase 2: CodeMirror 6 核心集成
+
+**状态**: 代码完成，待提交（Opus 4.6）
+
+**新增 4 个 editor 模块**：
+- ✅ `editor/cm-spans.ts` (~40行)：spans ↔ CM6位置 转换
+- ✅ `editor/cm-decorations.ts` (~150行)：两层 StateField 装饰（标注高亮 + 选中高亮）
+- ✅ `editor/cm-theme.ts` (~165行)：CM6 theme + 24色调色板 + 动态 CSS 注入
+- ✅ `editor/cm-setup.ts` (~23行)：CM6 Extension 数组
+
+**新增组件**：
+- ✅ `components/AnnotationEditor.tsx` (~145行)：CM6 React 封装，替换旧 textarea
+
+**修改**：
+- ✅ `Annotation.tsx`：删除 EditorPanel，集成 AnnotationEditor，工具栏绑定 store
+- ✅ `test-annotation.xml`：修复 spans off-by-one 偏移
+
+**修复6个问题**：
+- 🐛 标注黑色 → 新增 assignTagColors() 调色板分配
+- 🐛 标注左偏一字符 → 修正 test-annotation.xml spans
+- 🐛 DecorationSet TS1484 → type-only import
+- 🐛 遗漏 Color+ID 模式 → CSS ::before + wrapper class
+- 🐛 Tag列表颜色黑色 → assignTagColors 在 setDtd 之前调用
+- 🐛 工具栏未绑定 → Radio.Group/Switch 接入 setCm()
+
+**验证**：编译零错误，75测试通过，浏览器标注高亮正常
+
+**下一步**：Phase 3 右键菜单 + 实体创建（推荐 Sonnet）
+
 ---
 
 *最后更新: 2026-02-12*

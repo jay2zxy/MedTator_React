@@ -7,6 +7,25 @@
 
 ---
 
+## 开发规则
+
+### 验收标准（每个 Phase 完成前必须执行）
+
+1. `npm run build` — TypeScript 编译零错误
+2. `npm test` — 所有测试通过
+3. **逐功能比对原版**：打开原版 Flask 应用（localhost:8086）和 React 版（localhost:5173），对同一份测试数据，逐个功能点对比：
+   - 每个 UI 控件是否有对应实现（按钮、开关、下拉框）
+   - 每个控件是否接入了 store / 产生了实际效果
+   - 编辑器中的标注渲染是否与原版视觉一致（颜色、标签、位置）
+   - 交互行为是否一致（点击、右键、悬停）
+4. 只有全部比对通过，才可宣布 Phase 完成
+
+### 教训记录
+
+- **M4 Phase 2 遗漏**：只关注 CM6 底层架构（StateField/装饰系统），忽略了原版 "node" 模式（Color + ID 标签显示）、Tag 列表颜色同步、Toolbar 开关绑定。原因是没有逐功能比对原版，仅凭"编译通过 + 测试通过"就判定完成。
+
+---
+
 ## Session 1.1
 
 **时间**: 2026-02-11
@@ -535,115 +554,182 @@ AnnotationTable useMemo 重新过滤 → 只显示匹配的 tags
 
 ---
 
-## M4 架构计划 — 标注编辑器
+## Session 4.1 — M4 Phase 1: Store 扩展 + Tag Helper
 
 **时间**: 2026-02-12
 **分支**: jay-dev
-**状态**: 计划中
+**模型**: Sonnet 4.5
+**提交**: 8abb46a
 
-### 概述
+### 完成的工作
 
-M4 是核心模块：从 Vue+jQuery 的 `app_hotpot.js` (3795行) + `ext_codemirror.js` (1048行) 迁移标注编辑功能到 React + CodeMirror 6。
+**1. 新建 `utils/tag-helper.ts`（98行，从 app_hotpot.js 3348-3435行移植）**
 
-### 架构决策
+- `makeEtag(basicTag, tagDef, ann)` — 创建实体标注（自动递增ID + 默认属性值）
+- `makeEmptyEtagByDef(tagDef)` — 文档级标注（spans="-1~-1"，non-consuming）
+- `makeEmptyRtagByDef(tagDef)` — 空关系标注（所有属性设为空字符串）
+- `getIdrefAttrs(rtagDef)` — 从 rtag 定义中筛选 vtype=idref 的属性列表
 
-1. **CodeMirror 6**（非 CM5）
-   - `Decoration.mark()` 渲染实体标注高亮（保留底层文本，不替换 DOM）
-   - `StateField` + `StateEffect` 管理标注装饰数据
-   - 关系连线用绝对定位 SVG overlay
+**2. 扩展 store.ts（169行 → 298行）**
 
-2. **上下文菜单**
-   - 选中文本右键 → 显示实体类型列表
-   - 点击实体标记 → 显示关系类型 + 删除选项
+新增3组状态+actions：
 
-3. **状态管理**
-   - store.ts 新增：tag 增删改、linking 状态机、selectedTagId
-   - 纯函数：`utils/tag-helper.ts`（makeEtag、makeRtag 等）
+| 分组 | 状态 | Actions |
+|------|------|---------|
+| Tag操作 | — | `addTag(tag)`, `removeTag(tagId)`, `updateTagAttr(tagId, attr, value)`, `setAnnSaved()`, `setAnnUnsaved()` |
+| Tag选择 | `selectedTagId` | `setSelectedTagId(tagId)` |
+| 关系链接状态机 | `isLinking`, `linkingTagDef`, `linkingTag`, `linkingAtts` | `startLinking(rtagDef, firstEntityId)`, `setLinking(attIndex, entityId)`, `doneLinking()`, `cancelLinking()` |
 
-4. **延后项**
-   - BRAT 可视化：只读 SVG 渲染，非编辑必需，M4 之后单独做
-   - Hints 系统：store 预留状态，UI 后面再接
-   - Undo/Redo：CM6 有文本 undo，标注 undo 需额外实现，后续优化
+关键设计：
+- `addTag` 同时设置 `_saved = false`（标记文件 unsaved）
+- `removeTag` 同时删除引用该 tag 的 rtag（级联删除）
+- `doneLinking` 构造 rtag 后调用 `addTag`，然后重置 linking 状态
+- `cancelLinking` 仅重置状态，不做任何修改
 
-### 新增文件结构
+**3. 单元测试 `utils/__tests__/tag-helper.test.ts`（8个测试）**
 
-```
-新增：
-  editor/cm-setup.ts              # CM6 基础配置（只读、行号、换行、搜索）
-  editor/cm-decorations.ts        # StateField：标注 → 装饰映射
-  editor/cm-spans.ts              # spans字符串 ↔ CM6位置 转换
-  editor/cm-theme.ts              # 标注样式（mark-tag CSS + 动态颜色）
-  components/AnnotationEditor.tsx  # CM6 React 封装
-  components/ContextMenu.tsx       # 右键菜单（选中文本/点击标记）
-  utils/tag-helper.ts             # 标注创建纯函数
+覆盖：makeEtag ID自动递增、默认属性填充、makeEmptyEtagByDef spans="-1~-1"、makeEmptyRtagByDef 属性为空、getIdrefAttrs 过滤
 
-修改：
-  store.ts              # +tag增删改 +linking状态 +selectedTagId
-  types.ts              # +MenuState 类型（如需要）
-  components/Annotation.tsx  # EditorPanel → AnnotationEditor 替换
-                             # AnnotationTable 增强（属性编辑、删除、跳转）
-```
+### 验证
 
-### 7 个 Phase（按依赖顺序）
+- TypeScript 编译 ✅ 零错误
+- 75 个测试 ✅ 全部通过（67 旧 + 8 新）
+- Git 提交 ✅ 8abb46a
 
 ---
 
-#### Phase 1: Store 扩展 + Tag Helper
+## Session 4.2 — M4 Phase 2: CodeMirror 6 核心集成
 
-**目标**：所有标注操作逻辑可测试
+**时间**: 2026-02-12
+**分支**: jay-dev
+**模型**: Opus 4.6
+**状态**: 代码完成，待提交
 
-**store.ts 新增**：
-- `addTag(tag)` / `removeTag(tagId)` / `updateTagAttr(tagId, attr, val)`
-- `setAnnUnsaved()` / `setAnnSaved()`
-- `isLinking` / `linkingTagDef` / `linkingTag` / `linkingAtts`
-- `startLinking()` / `setLinking()` / `doneLinking()` / `cancelLinking()`
-- `selectedTagId` / `setSelectedTagId()`
+### 完成的工作
 
-**新建 `utils/tag-helper.ts`**（从 app_hotpot.js 3348-3435行移植）：
-- `makeEtag(basicTag, tagDef, ann)` → 创建实体标注（自动ID + 默认属性）
-- `makeEmptyEtagByDef(tagDef)` → 文档级标注（non-consuming）
-- `makeEmptyRtagByDef(tagDef)` → 空关系标注
-- `getIdrefAttrs(rtagDef)` → 获取关系的 IDREF 属性列表
-
-**验证**：TypeScript 编译 + 67个旧测试不受影响
-
----
-
-#### Phase 2: CodeMirror 6 核心集成 ⭐ 最复杂
-
-**目标**：CM6 显示文本 + 实体标注彩色高亮
-
-**NPM 新增**：
+**1. 安装 CM6 依赖**
 ```
 @codemirror/state @codemirror/view @codemirror/search @codemirror/commands
 ```
 
-**`editor/cm-setup.ts`**：
-- `createEditorExtensions(settings)` → 返回 CM6 Extension 数组
-- 只读、行号、换行、搜索快捷键
+**2. 新建 `editor/cm-spans.ts`（~40行）**
+- `spansToCmRanges(spans)` — 解析 "10~20,30~40" 为 `{from, to}[]`
+- `cmRangeToSpans(from, to)` — 转回 spans 字符串
+- CM6 用绝对字符偏移，比 CM5 的 line+ch 更简单，无需行列转换
 
-**`editor/cm-spans.ts`**：
-- `spansToCmRanges(spans)` → 解析 "10~20,30~40" 为 `{from, to}[]`
-- `cmRangeToSpans(from, to)` → 转回 spans 字符串
-- CM6 用绝对字符偏移，比 CM5 的 line+ch 更简单
+**3. 新建 `editor/cm-decorations.ts`（~150行）**
 
-**`editor/cm-decorations.ts`**：
-- `StateEffect` 接收 `{tags, dtd, displayTagName}`
-- `StateField<DecorationSet>` 从 tags 构建 `Decoration.mark()`
-- 每个实体标注 → `mark({ class: 'mark-tag-{tagName}', attributes: {'data-tag-id': id} })`
+两个独立的 StateField 装饰层：
 
-**`editor/cm-theme.ts`**：
-- 标注样式：圆角、padding、cursor
-- 选中标注样式：蓝色 boxShadow
-- 动态颜色：从 DTD tag.style.color 生成 CSS
+| Field | Effect | 作用 |
+|-------|--------|------|
+| `tagDecorationField` | `setTagDecorations` | 所有可见实体标注 → `Decoration.mark({ class: 'mark-tag mark-tag-{TAG}' })` |
+| `selectedTagField` | `setSelectedTag` | 选中标注高亮 → `Decoration.mark({ class: 'mark-tag-active' })` |
 
-**`components/AnnotationEditor.tsx`**：
-- `useRef` 管理 CM6 EditorView 实例
-- `useEffect` 响应 annIdx 变化 → 更新文档内容
-- `useEffect` 响应 tags/displayTagName 变化 → 派发 StateEffect 更新装饰
-- 替换 Annotation.tsx 中的 `<textarea>`
+关键逻辑：
+- 显示过滤：`displayTagName !== '__all__'` 时只渲染匹配的 etag
+- rtag 关联：当过滤条件是 rtag 时，也显示被该 rtag 引用的 etag
+- 跳过无效 spans（空字符串、"-1~-1"、超出文档范围）
+- CM6 要求装饰范围排序，用 `ranges.sort()` + `Decoration.set(ranges, true)`
 
-**验证**：加载 schema + annotation → 编辑器显示彩色标注高亮
+**4. 新建 `editor/cm-theme.ts`（~165行）**
+
+三部分：
+
+- **`annotationTheme`**（CM6 EditorView.theme）：
+  - `.mark-tag` — 圆角3px、pointer cursor、透明边框（hover变红）
+  - `.mark-tag-active` — 3px黑色上下边框 + glow动画
+  - `.mark-hint` — 虚线下划线、hover加粗
+
+- **`assignTagColors(dtd)`**（在 `setDtd` 之前调用）：
+  - 24色调色板（从原版 app_hotpot.js 的 `app_colors` 移植）
+  - 遍历 `dtd.tag_dict`，为每个未着色的 tag 分配颜色
+  - **必须在 `setDtd()` 之前调用**，否则 store 中的 dtd 没有颜色信息
+
+- **`injectTagColors(dtd)`**（DTD 变化时调用）：
+  - 注入 `<style>` 元素，生成 `.mark-tag-{TAG} { background-color: ... }` 规则
+  - 同时注入全局静态样式（glow 动画 + node 模式 `::before` 伪元素）
+
+**5. 新建 `editor/cm-setup.ts`（~23行）**
+- `createEditorExtensions()` → 返回 Extension 数组
+- 包含：readOnly、lineNumbers、lineWrapping、search + searchKeymap、annotationTheme、两个 StateField
+
+**6. 新建 `components/AnnotationEditor.tsx`（~145行）**
+
+CM6 React 封装：
+- `useRef<EditorView>` 管理实例
+- **始终挂载容器 div**（用 `visibility: hidden` + 绝对定位 overlay 处理空状态）
+- 3 个 useEffect：
+  - `[]` — 初始化 CM6 实例（一次性）
+  - `[dtd]` — DTD 变化时注入 tag 颜色
+  - `[anns, annIdx, dtd, displayTagName, selectedTagId]` — 更新文档 + 派发装饰 Effect
+- 外层 div 根据 `cm.markMode` 添加 `mark-mode-node` / `mark-mode-span` 类
+
+**7. 修改 `components/Annotation.tsx`**
+
+- 删除旧的 `EditorPanel`（textarea 占位），替换为 `<AnnotationEditor />`
+- Schema 加载流程：`assignTagColors(parsed)` → `setDtd(parsed)`（确保颜色先写入）
+- 工具栏控件全部绑定到 store：
+  - Display Mode → `cm.displayMode`
+  - Entity Marks → `cm.markMode`（"node" / "span"）
+  - Link Marks → `cm.enabledLinks` / `cm.enabledLinkComplex`
+  - Hint Marks → `cm.enabledHints` / `cm.hintMode`
+
+**8. 修复 `test-annotation.xml` spans 偏移**
+- 所有 spans 向右修正 +1（原来 off-by-one）
+- 例：severe 15~21 → 16~22，headache 22~30 → 23~31
+
+### 问题与修复
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| 所有标注显示黑色 | DTD 默认颜色 #333333，未分配调色板颜色 | 新增 `assignTagColors()`，在 `setDtd` 前调用 |
+| 标注高亮左偏一个字符 | test-annotation.xml spans 数值错误 | 重新计算正确的字符偏移 |
+| `DecorationSet` 导入报 TS1484 | verbatimModuleSyntax 要求 type-only import | `import { Decoration, type DecorationSet }` |
+| 遗漏 Color+ID 模式 | 只关注 CM6 底层，没比对原版 UI | 用 CSS `::before { content: attr(data-tag-id) }` + wrapper class 控制 |
+| Tag 列表颜色方块黑色 | 颜色在 `injectTagColors` 里赋值，但 store 里的 dtd 已经存了 | 拆分：`assignTagColors` 先改 dtd → `setDtd` 存入 store → `injectTagColors` 生成 CSS |
+| 工具栏开关未绑定 store | 控件写了但没接 `onChange` | 所有 Radio.Group/Switch 绑定 `setCm()` |
+
+### 验证
+
+- TypeScript 编译 ✅ 零错误
+- 75 个测试 ✅ 全部通过
+- 浏览器测试 ✅：
+  - 加载 test-schema.dtd → 显示 `✓ MEDICAL_SYMPTOMS`
+  - 加载 test-annotation.xml → 编辑器显示彩色标注高亮
+  - Tag 列表颜色方块正确显示
+  - Entity Marks 切换 Color+ID / Color Only 正常
+  - 标注位置与文本对齐
+
+### 文件变更统计
+
+| 文件 | 状态 | 行数 |
+|------|------|------|
+| `editor/cm-spans.ts` | 新增 | ~40 |
+| `editor/cm-decorations.ts` | 新增 | ~150 |
+| `editor/cm-theme.ts` | 新增 | ~165 |
+| `editor/cm-setup.ts` | 新增 | ~23 |
+| `components/AnnotationEditor.tsx` | 新增 | ~145 |
+| `components/Annotation.tsx` | 修改 | 删除 EditorPanel + 添加 CM6 集成 + 工具栏绑定 |
+| `test-annotation.xml` | 修复 | spans 偏移修正 |
+
+### 下一步
+
+Phase 3: 右键菜单 + 实体创建（推荐 Sonnet）
+
+---
+
+## M4 架构计划 — 标注编辑器（剩余 Phase）
+
+### 7 个 Phase 进度
+
+- [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
+- [x] Phase 2: CM6 核心集成 ✅ (待提交)
+- [ ] Phase 3: 右键菜单 + 实体创建
+- [ ] Phase 4: 标注表格交互增强
+- [ ] Phase 5: 关系标注链接
+- [ ] Phase 6: 关系连线渲染
+- [ ] Phase 7: 保存 + 收尾
 
 ---
 
