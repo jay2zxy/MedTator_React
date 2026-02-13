@@ -719,13 +719,90 @@ Phase 3: 右键菜单 + 实体创建（推荐 Sonnet）
 
 ---
 
+## Session 4.3 — M4 Phase 3: 右键菜单 + 实体创建
+
+**时间**: 2026-02-13
+**分支**: jay-dev
+**模型**: Sonnet 4.5
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 新建 `ContextMenu.tsx`（156行）**
+- React Portal 实现浮层定位（fixed positioning）
+- 显示 Entity Tags 列表（颜色方块 + 名称 + 快捷键）
+- Escape / 点击外部自动关闭
+- 菜单溢出视口时自动调整位置
+
+**2. 修改 `AnnotationEditor.tsx`**
+- 集成 `EditorView.domEventHandlers`：
+  - **contextmenu**: 选中文本右键 → 显示菜单（selection.from !== selection.to）
+  - **mousedown**: 点击标注 → 设置 selectedTagId（检测 `data-tag-id` 属性）
+- `handleTagSelect`: 菜单点击 → `cmRangeToSpans` → `makeEtag` → `addTag` → 清除 CM6 选择
+- 渲染 `<ContextMenu>` 组件
+
+**3. 修改 `Annotation.tsx`**
+- AnnotationTable 添加 useRef + useEffect：标注数量变化时自动滚动到底部
+- 添加 useEffect import
+
+### 数据流
+
+```
+用户选中文本 "Blood pressure"
+  ↓
+右键 → contextmenu 事件 → 记录 selection { from: 75, to: 89 }
+  ↓
+显示 ContextMenu（3个 Entity Tags）
+  ↓
+点击 SYMPTOM
+  ↓
+cmRangeToSpans(75, 89) → "75~89"
+  ↓
+makeEtag({ spans: "75~89", text: "Blood pressure" }, SYMPTOM_def, ann)
+  ↓
+store.addTag(tag) → anns[annIdx].tags.push + _saved=false
+  ↓
+useEffect 触发 → CM6 dispatch setTagDecorations → 彩色高亮出现
+  ↓
+AnnotationTable useEffect 触发 → scrollTop = scrollHeight
+```
+
+### 功能对照原版
+
+| 功能 | 原版 | 实现 | 状态 |
+|------|------|------|------|
+| 选中文本右键显示菜单 | ✅ | ✅ | ✅ |
+| 菜单颜色方块 + 快捷键 | ✅ | ✅ | ✅ |
+| 点击菜单创建标注 | ✅ | ✅ | ✅ |
+| 创建后清除选择 | ✅ | ✅ | ✅ |
+| 创建后关闭菜单 | ✅ | ✅ | ✅ |
+| 创建后滚动表格到底部 | ✅ | ✅ | ✅ |
+| Escape/点击外部关闭 | ✅ | ✅ | ✅ |
+| 点击标注高亮 | ✅ | ✅ | ✅ |
+| **快捷键创建标注** | ✅ | ❌ | ⏸️ Phase 7 |
+| **点击标注显示菜单** | ✅ | ❌ | ⏸️ Phase 5 |
+
+**核心功能完成度: 100%**
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试通过
+- ✅ 浏览器测试（用户确认）：右键菜单弹出 → 选择 tag → 标注显示
+
+### 下一步
+
+Phase 4: 标注表格交互增强（推荐 Sonnet）
+
+---
+
 ## M4 架构计划 — 标注编辑器（剩余 Phase）
 
 ### 7 个 Phase 进度
 
 - [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
-- [x] Phase 2: CM6 核心集成 ✅ (待提交)
-- [ ] Phase 3: 右键菜单 + 实体创建
+- [x] Phase 2: CM6 核心集成 ✅ (9984b6b)
+- [x] Phase 3: 右键菜单 + 实体创建 ✅ (待提交)
 - [ ] Phase 4: 标注表格交互增强
 - [ ] Phase 5: 关系标注链接
 - [ ] Phase 6: 关系连线渲染

@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
 import { Radio, Button, Switch, Select, Input, Divider, message } from 'antd'
 import {
   SearchOutlined,
@@ -546,6 +546,7 @@ function AnnotationTable() {
   const annIdx = useAppStore(state => state.annIdx)
   const displayTagName = useAppStore(state => state.displayTagName)
 
+  const containerRef = useRef<HTMLDivElement>(null)
   const currentAnn = annIdx !== null ? anns[annIdx] : null
 
   // Filter tags by displayTagName
@@ -555,8 +556,20 @@ function AnnotationTable() {
     return currentAnn.tags.filter(tag => tag.tag === displayTagName)
   }, [currentAnn, displayTagName])
 
+  // Auto-scroll to bottom when new tag is added
+  useEffect(() => {
+    if (containerRef.current && displayedTags.length > 0) {
+      // Small delay to ensure DOM update
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight
+        }
+      })
+    }
+  }, [displayedTags.length])
+
   return (
-    <div style={{ flex: 1, overflow: 'auto' }}>
+    <div ref={containerRef} style={{ flex: 1, overflow: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ background: '#fafafa', borderBottom: '1px solid #e9e9e9', position: 'sticky', top: 0 }}>

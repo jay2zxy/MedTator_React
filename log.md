@@ -229,6 +229,35 @@ interface AppState {
 
 **下一步**：Phase 3 右键菜单 + 实体创建（推荐 Sonnet）
 
+### 2026-02-13 - Session 4.3 M4 Phase 3: 右键菜单 + 实体创建
+
+**状态**: 代码完成，待提交（Sonnet 4.5）
+
+**新增组件**：
+- ✅ `ContextMenu.tsx` (156行)：React Portal 浮层，显示 Entity Tags 列表
+
+**修改**：
+- ✅ `AnnotationEditor.tsx`：集成 contextmenu/mousedown 事件，handleTagSelect 逻辑
+- ✅ `Annotation.tsx`：AnnotationTable 添加自动滚动到底部
+
+**数据流**：
+```
+选中文本 → 右键 → ContextMenu → 点击 tag
+  ↓
+cmRangeToSpans → makeEtag → store.addTag
+  ↓
+useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
+```
+
+**功能对照**：核心功能 100% 完成
+- ✅ 右键菜单（颜色 + 快捷键）、创建标注、清除选择、关闭菜单
+- ✅ 滚动表格到底部、点击标注高亮
+- ⏸️ 快捷键创建（延后到 Phase 7）
+
+**验证**：编译零错误，75测试通过，浏览器功能正常
+
+**下一步**：Phase 4 标注表格交互增强（推荐 Sonnet）
+
 ---
 
-*最后更新: 2026-02-12*
+*最后更新: 2026-02-13*
