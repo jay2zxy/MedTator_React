@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Dtd, Ann } from './types'
+import type { Dtd, Ann, AnnTag, DtdTag, DtdAttr } from './types'
 
 // ── Exported Types ──
 
@@ -62,6 +62,27 @@ interface AppState {
   // ─ Tag Display Filter ─
   displayTagName: string
   setDisplayTagName: (name: string) => void
+
+  // ─ Tag Operations ─
+  addTag: (tag: AnnTag) => void
+  removeTag: (tagId: string) => boolean
+  updateTagAttr: (tagId: string, attr: string, value: any) => void
+  setAnnSaved: () => void
+  setAnnUnsaved: () => void
+
+  // ─ Tag Selection ─
+  selectedTagId: string | null
+  setSelectedTagId: (tagId: string | null) => void
+
+  // ─ Relation Linking State Machine ─
+  isLinking: boolean
+  linkingTagDef: DtdTag | null
+  linkingTag: Partial<AnnTag> | null
+  linkingAtts: DtdAttr[]
+  startLinking: (rtagDef: DtdTag, firstEntityId: string) => void
+  setLinking: (attIndex: number, entityId: string) => void
+  doneLinking: () => void
+  cancelLinking: () => void
 
   // ─ Loading Progress ─
   isLoadingAnns: boolean
@@ -131,6 +152,160 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ─ Tag Display Filter ─
   displayTagName: '__all__',
   setDisplayTagName: (name) => set({ displayTagName: name }),
+
+  // ─ Tag Operations ─
+  addTag: (tag) => {
+    const { anns, annIdx } = get()
+    if (annIdx === null) return
+
+    const ann = anns[annIdx]
+    ann.tags.push(tag)
+    ann._has_saved = false
+
+    set({ anns: [...anns] }) // Trigger re-render
+  },
+
+  removeTag: (tagId) => {
+    const { anns, annIdx } = get()
+    if (annIdx === null) return false
+
+    const ann = anns[annIdx]
+    const tagIdx = ann.tags.findIndex((t) => t.id === tagId)
+
+    if (tagIdx === -1) return false
+
+    ann.tags.splice(tagIdx, 1)
+    ann._has_saved = false
+
+    set({ anns: [...anns], selectedTagId: null }) // Trigger re-render
+    return true
+  },
+
+  updateTagAttr: (tagId, attr, value) => {
+    const { anns, annIdx } = get()
+    if (annIdx === null) return
+
+    const ann = anns[annIdx]
+    const tag = ann.tags.find((t) => t.id === tagId)
+
+    if (!tag) return
+
+    tag[attr] = value
+    ann._has_saved = false
+
+    set({ anns: [...anns] }) // Trigger re-render
+  },
+
+  setAnnSaved: () => {
+    const { anns, annIdx } = get()
+    if (annIdx === null) return
+
+    anns[annIdx]._has_saved = true
+    set({ anns: [...anns] })
+  },
+
+  setAnnUnsaved: () => {
+    const { anns, annIdx } = get()
+    if (annIdx === null) return
+
+    anns[annIdx]._has_saved = false
+    set({ anns: [...anns] })
+  },
+
+  // ─ Tag Selection ─
+  selectedTagId: null,
+  setSelectedTagId: (tagId) => set({ selectedTagId: tagId }),
+
+  // ─ Relation Linking State Machine ─
+  isLinking: false,
+  linkingTagDef: null,
+  linkingTag: null,
+  linkingAtts: [],
+
+  startLinking: (rtagDef, firstEntityId) => {
+    const { annIdx } = get()
+    if (annIdx === null) return
+
+    const idrefAttrs = rtagDef.attrs.filter((att) => att.vtype === 'idref')
+
+    // Create partial rtag with first entity
+    const partialTag: Partial<AnnTag> = {
+      tag: rtagDef.name,
+    }
+
+    // Set first IDREF attribute
+    if (idrefAttrs.length > 0) {
+      partialTag[idrefAttrs[0].name] = firstEntityId
+    }
+
+    // Initialize with default values for non-IDREF attributes
+    for (const att of rtagDef.attrs) {
+      if (att.vtype !== 'idref' && att.name !== 'spans') {
+        partialTag[att.name] = att.default_value
+      }
+    }
+
+    set({
+      isLinking: true,
+      linkingTagDef: rtagDef,
+      linkingTag: partialTag,
+      linkingAtts: idrefAttrs,
+    })
+  },
+
+  setLinking: (attIndex, entityId) => {
+    const { linkingTag, linkingAtts } = get()
+    if (!linkingTag || attIndex >= linkingAtts.length) return
+
+    const updatedTag = {
+      ...linkingTag,
+      [linkingAtts[attIndex].name]: entityId,
+    }
+
+    set({ linkingTag: updatedTag })
+  },
+
+  doneLinking: () => {
+    const { anns, annIdx, linkingTag, linkingTagDef } = get()
+    if (annIdx === null || !linkingTag || !linkingTagDef) return
+
+    const ann = anns[annIdx]
+
+    // Generate ID
+    let n = 0
+    for (const tag of ann.tags) {
+      if (tag.tag === linkingTagDef.name) {
+        const _id = parseInt(tag.id.replace(linkingTagDef.id_prefix, ''))
+        if (_id >= n) n = _id + 1
+      }
+    }
+
+    const completeTag: AnnTag = {
+      id: linkingTagDef.id_prefix + n,
+      tag: linkingTagDef.name,
+      ...linkingTag,
+    }
+
+    ann.tags.push(completeTag)
+    ann._has_saved = false
+
+    set({
+      anns: [...anns],
+      isLinking: false,
+      linkingTagDef: null,
+      linkingTag: null,
+      linkingAtts: [],
+    })
+  },
+
+  cancelLinking: () => {
+    set({
+      isLinking: false,
+      linkingTagDef: null,
+      linkingTag: null,
+      linkingAtts: [],
+    })
+  },
 
   // ─ Loading Progress ─
   isLoadingAnns: false,

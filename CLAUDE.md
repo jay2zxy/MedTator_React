@@ -531,9 +531,230 @@ AnnotationTable useMemo 重新过滤 → 只显示匹配的 tags
 
 ### 下一步
 
-进入 **M4 - 标注编辑器** (12 天，核心模块)：
-1. CodeMirror 6 集成
-2. 实体标注（选中文本 → 创建标签）
-3. 关系标注（连线 + 属性）
-4. BRAT 可视化封装
-5. 快捷键支持
+进入 **M4 - 标注编辑器**
+
+---
+
+## M4 架构计划 — 标注编辑器
+
+**时间**: 2026-02-12
+**分支**: jay-dev
+**状态**: 计划中
+
+### 概述
+
+M4 是核心模块：从 Vue+jQuery 的 `app_hotpot.js` (3795行) + `ext_codemirror.js` (1048行) 迁移标注编辑功能到 React + CodeMirror 6。
+
+### 架构决策
+
+1. **CodeMirror 6**（非 CM5）
+   - `Decoration.mark()` 渲染实体标注高亮（保留底层文本，不替换 DOM）
+   - `StateField` + `StateEffect` 管理标注装饰数据
+   - 关系连线用绝对定位 SVG overlay
+
+2. **上下文菜单**
+   - 选中文本右键 → 显示实体类型列表
+   - 点击实体标记 → 显示关系类型 + 删除选项
+
+3. **状态管理**
+   - store.ts 新增：tag 增删改、linking 状态机、selectedTagId
+   - 纯函数：`utils/tag-helper.ts`（makeEtag、makeRtag 等）
+
+4. **延后项**
+   - BRAT 可视化：只读 SVG 渲染，非编辑必需，M4 之后单独做
+   - Hints 系统：store 预留状态，UI 后面再接
+   - Undo/Redo：CM6 有文本 undo，标注 undo 需额外实现，后续优化
+
+### 新增文件结构
+
+```
+新增：
+  editor/cm-setup.ts              # CM6 基础配置（只读、行号、换行、搜索）
+  editor/cm-decorations.ts        # StateField：标注 → 装饰映射
+  editor/cm-spans.ts              # spans字符串 ↔ CM6位置 转换
+  editor/cm-theme.ts              # 标注样式（mark-tag CSS + 动态颜色）
+  components/AnnotationEditor.tsx  # CM6 React 封装
+  components/ContextMenu.tsx       # 右键菜单（选中文本/点击标记）
+  utils/tag-helper.ts             # 标注创建纯函数
+
+修改：
+  store.ts              # +tag增删改 +linking状态 +selectedTagId
+  types.ts              # +MenuState 类型（如需要）
+  components/Annotation.tsx  # EditorPanel → AnnotationEditor 替换
+                             # AnnotationTable 增强（属性编辑、删除、跳转）
+```
+
+### 7 个 Phase（按依赖顺序）
+
+---
+
+#### Phase 1: Store 扩展 + Tag Helper
+
+**目标**：所有标注操作逻辑可测试
+
+**store.ts 新增**：
+- `addTag(tag)` / `removeTag(tagId)` / `updateTagAttr(tagId, attr, val)`
+- `setAnnUnsaved()` / `setAnnSaved()`
+- `isLinking` / `linkingTagDef` / `linkingTag` / `linkingAtts`
+- `startLinking()` / `setLinking()` / `doneLinking()` / `cancelLinking()`
+- `selectedTagId` / `setSelectedTagId()`
+
+**新建 `utils/tag-helper.ts`**（从 app_hotpot.js 3348-3435行移植）：
+- `makeEtag(basicTag, tagDef, ann)` → 创建实体标注（自动ID + 默认属性）
+- `makeEmptyEtagByDef(tagDef)` → 文档级标注（non-consuming）
+- `makeEmptyRtagByDef(tagDef)` → 空关系标注
+- `getIdrefAttrs(rtagDef)` → 获取关系的 IDREF 属性列表
+
+**验证**：TypeScript 编译 + 67个旧测试不受影响
+
+---
+
+#### Phase 2: CodeMirror 6 核心集成 ⭐ 最复杂
+
+**目标**：CM6 显示文本 + 实体标注彩色高亮
+
+**NPM 新增**：
+```
+@codemirror/state @codemirror/view @codemirror/search @codemirror/commands
+```
+
+**`editor/cm-setup.ts`**：
+- `createEditorExtensions(settings)` → 返回 CM6 Extension 数组
+- 只读、行号、换行、搜索快捷键
+
+**`editor/cm-spans.ts`**：
+- `spansToCmRanges(spans)` → 解析 "10~20,30~40" 为 `{from, to}[]`
+- `cmRangeToSpans(from, to)` → 转回 spans 字符串
+- CM6 用绝对字符偏移，比 CM5 的 line+ch 更简单
+
+**`editor/cm-decorations.ts`**：
+- `StateEffect` 接收 `{tags, dtd, displayTagName}`
+- `StateField<DecorationSet>` 从 tags 构建 `Decoration.mark()`
+- 每个实体标注 → `mark({ class: 'mark-tag-{tagName}', attributes: {'data-tag-id': id} })`
+
+**`editor/cm-theme.ts`**：
+- 标注样式：圆角、padding、cursor
+- 选中标注样式：蓝色 boxShadow
+- 动态颜色：从 DTD tag.style.color 生成 CSS
+
+**`components/AnnotationEditor.tsx`**：
+- `useRef` 管理 CM6 EditorView 实例
+- `useEffect` 响应 annIdx 变化 → 更新文档内容
+- `useEffect` 响应 tags/displayTagName 变化 → 派发 StateEffect 更新装饰
+- 替换 Annotation.tsx 中的 `<textarea>`
+
+**验证**：加载 schema + annotation → 编辑器显示彩色标注高亮
+
+---
+
+#### Phase 3: 右键菜单 + 实体创建
+
+**目标**：选中文本 → 右键 → 选标签类型 → 创建标注
+
+**`components/ContextMenu.tsx`**：
+- 浮层组件，React Portal 定位到鼠标坐标
+- 选中文本右键 → 列出 dtd.etags（颜色图标 + 名称 + 快捷键）
+- 点击标记右键 → 列出关系类型 + 删除选项
+- Escape / 点击外部关闭
+
+**创建流程**：
+```
+CM6 selection → cmRangeToSpans(from, to) → spans字符串
+→ makeEtag(basicTag, tagDef, currentAnn) → AnnTag
+→ store.addTag(tag) → useEffect 触发装饰重建
+```
+
+**CM6 事件绑定**：
+- `EditorView.domEventHandlers({ contextmenu, mousedown })`
+- contextmenu：阻止默认，显示菜单
+- mousedown：检测 data-tag-id 属性，设置 selectedTagId
+
+**验证**：选文本 → 右键 → 创建实体 → 编辑器和表格都显示新标注
+
+---
+
+#### Phase 4: 标注表格交互增强
+
+**目标**：内联属性编辑 + 点击跳转 + 删除
+
+**从 Annotation.tsx 增强 AnnotationTable**：
+- 属性列根据 DtdAttr.vtype 渲染不同控件：
+  - `list` → `<Select>` + attr.values
+  - `text` → `<Input>`
+  - `idref` → `<Select>` 列出当前文件所有实体标注
+- 修改属性 → `store.updateTagAttr()`
+- 点击行 → CM6 `scrollIntoView` + `setSelectedTagId`
+- 删除按钮 → 检查关联 rtags → `Modal.confirm()` → `store.removeTag()`
+- 双向高亮：selectedTagId 同时影响编辑器和表格
+
+**验证**：修改属性 → 文件标记 unsaved。点击行 → 编辑器滚动。删除 → 表格和编辑器同步。
+
+---
+
+#### Phase 5: 关系标注链接 ⭐ 复杂状态机
+
+**目标**：两阶段创建关系标注
+
+**流程**：
+1. 点击实体标记 → 弹出菜单显示可用关系类型
+2. 选择关系类型 → `startLinking(rtagDef, entityId)`
+3. 编辑器顶部显示链接指示条："Creating [RelType] — click next entity for arg1"
+4. 点击第二个实体 → `setLinking(0, entityId)`
+5. 如果还有更多 IDREF 属性 → 继续；否则 → `doneLinking()`
+6. 关系标注添加到 tags 数组
+
+**UI**：
+- 链接进行中显示浮动横幅
+- 菜单在链接模式下显示剩余属性 + 取消按钮
+- `cancelLinking()` 重置所有状态
+
+**验证**：创建两个实体 → 点击第一个 → 选关系类型 → 点击第二个 → 关系出现在表格
+
+---
+
+#### Phase 6: 关系连线渲染
+
+**目标**：SVG 连线显示实体间关系
+
+- 绝对定位 SVG 覆盖在 CM6 上方（pointerEvents: none）
+- `view.coordsAtPos()` 获取实体标记位置
+- 绘制 polyline 连线 + 中点标签文字
+- 响应滚动和 resize 重新计算
+- 工具栏开关：Show Links / Show Lines
+
+**验证**：创建关系 → 连线出现。滚动 → 连线跟随。关闭开关 → 连线消失。
+
+---
+
+#### Phase 7: 保存 + 收尾
+
+**目标**：文件保存 + 快捷键 + UI 打磨
+
+- Save 按钮：`ann2xml(ann, dtd)` → `xml2str()` → `downloadTextAsFile()`
+- Ctrl+S 快捷键
+- 文件列表 unsaved 标记（文件名前加 * 号）
+- Tag 快捷键（dtd.etags[i].shortcut → 选中文本时按键创建标注）
+- 标注颜色动态生成 CSS
+
+**验证**：修改标注 → * 号出现 → 保存 → 下载 XML → 重新加载验证内容一致
+
+---
+
+### 模型分配
+
+| Phase | 模型 | 原因 |
+|-------|------|------|
+| Phase 1: Store + Helpers | Sonnet | 纯函数移植 + store 扩展，逻辑明确 |
+| Phase 2: CM6 核心 | **Opus** | 架构最复杂：StateField、装饰系统、React 集成 |
+| Phase 3: 右键菜单 + 实体创建 | Sonnet | UI 组件 + 事件绑定，模式已定 |
+| Phase 4: 表格交互 | Sonnet | 表单控件 + 事件处理 |
+| Phase 5: 关系链接 | **Opus** | 多步状态机，交互复杂 |
+| Phase 6: 关系连线 | Sonnet | SVG 绘制，逻辑清晰 |
+| Phase 7: 保存 + 收尾 | Sonnet | 功能明确，组合已有工具 |
+
+### 验证策略
+
+每个 Phase 完成后：
+1. `npm run build` — TypeScript 编译零错误
+2. `npm test` — 67 个旧测试 + 新测试全部通过
+3. `npm run dev` — 浏览器手动测试（加载 test-schema.dtd + test-annotation.xml）
