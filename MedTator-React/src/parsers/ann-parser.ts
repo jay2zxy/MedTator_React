@@ -246,6 +246,20 @@ export function xml2str(xmlDoc: XMLDocument): string {
   ].join('\n')
 }
 
+// ── Tag utilities ──
+
+/**
+ * Get tag by ID from annotation.
+ */
+export function getTagById(tagId: string, ann: Ann): AnnTag | null {
+  for (const tag of ann.tags) {
+    if (tag.id === tagId) {
+      return tag
+    }
+  }
+  return null
+}
+
 // ── Hint Dictionary ──
 
 export interface HintTextInfo {

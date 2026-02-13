@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo } from 'react'
 import { Radio, Button, Switch, Select, Input, Divider, message } from 'antd'
 import {
   SearchOutlined,
@@ -21,6 +21,7 @@ import { parse as parseDtd } from '../parsers/dtd-parser'
 import { xml2ann, txt2ann } from '../parsers/ann-parser'
 import { assignTagColors } from '../editor/cm-theme'
 import AnnotationEditor from './AnnotationEditor'
+import AnnotationTable from './AnnotationTable'
 
 /* ── 工具栏 Ribbon ── */
 function ToolbarRibbon() {
@@ -536,81 +537,6 @@ function TagListPanel() {
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-/* ── 标注表格 ── */
-function AnnotationTable() {
-  const anns = useAppStore(state => state.anns)
-  const annIdx = useAppStore(state => state.annIdx)
-  const displayTagName = useAppStore(state => state.displayTagName)
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  const currentAnn = annIdx !== null ? anns[annIdx] : null
-
-  // Filter tags by displayTagName
-  const displayedTags = useMemo(() => {
-    if (!currentAnn) return []
-    if (displayTagName === '__all__') return currentAnn.tags
-    return currentAnn.tags.filter(tag => tag.tag === displayTagName)
-  }, [currentAnn, displayTagName])
-
-  // Auto-scroll to bottom when new tag is added
-  useEffect(() => {
-    if (containerRef.current && displayedTags.length > 0) {
-      // Small delay to ensure DOM update
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight
-        }
-      })
-    }
-  }, [displayedTags.length])
-
-  return (
-    <div ref={containerRef} style={{ flex: 1, overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: '#fafafa', borderBottom: '1px solid #e9e9e9', position: 'sticky', top: 0 }}>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 100 }}>Tag</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 50 }}>ID</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 100 }}>Spans</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', minWidth: 150 }}>Text</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Attributes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {displayedTags.length === 0 ? (
-            <tr>
-              <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: '#ccc' }}>
-                {currentAnn ? 'No annotations' : 'Select a file to view annotations'}
-              </td>
-            </tr>
-          ) : (
-            displayedTags.map((tag, idx) => {
-              const spansText = tag.spans || ''
-              const tagText = tag.text || ''
-              const attrs = Object.entries(tag)
-                .filter(([k, v]) => !['tag', 'id', 'spans', 'text', 'type'].includes(k) && v)
-                .map(([k, v]) => `${k}=${v}`)
-                .join(', ')
-
-              return (
-                <tr key={tag.id || idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '4px 8px' }}>{tag.tag}</td>
-                  <td style={{ padding: '4px 8px', color: '#888' }}>{tag.id}</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: 11 }}>{spansText}</td>
-                  <td style={{ padding: '4px 8px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {tagText}
-                  </td>
-                  <td style={{ padding: '4px 8px', color: '#666', fontSize: 11 }}>{attrs}</td>
-                </tr>
-              )
-            })
-          )}
-        </tbody>
-      </table>
     </div>
   )
 }

@@ -796,14 +796,156 @@ Phase 4: 标注表格交互增强（推荐 Sonnet）
 
 ---
 
+## Session 4.4 — M4 Phase 4: 标注表格交互增强
+
+**时间**: 2026-02-13
+**分支**: jay-dev
+**模型**: Sonnet 4.5
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 新建 `components/AnnotationTable.tsx`（250行）**
+
+独立的表格组件，包含：
+- **内联属性编辑**：
+  - `list` 类型 → Select 下拉框 + "-- EMPTY --" 选项
+  - `text` 类型 → Input 输入框
+  - `idref` 类型 → Select 下拉框（显示当前文件所有实体标注）
+  - 点击停止事件冒泡，避免触发行选择
+- **删除按钮**：
+  - 每行添加红色删除按钮
+  - 无关联关系 → 直接删除 + message 提示
+  - 有关联关系 → Modal.confirm() 显示关联 rtag 列表 → 级联删除
+- **点击行高亮**：
+  - 点击行 → 设置 `selectedTagId`
+  - 表格行蓝色高亮（`background: '#e6f7ff'`）
+  - 编辑器中同步高亮（Phase 2 已实现）
+- **Auto-scroll**：新标注添加时自动滚动到底部
+
+**2. 修改 `components/Annotation.tsx`**
+- 删除旧的内联 AnnotationTable 函数（~70行）
+- 导入新的 AnnotationTable 组件
+- 移除 useEffect import（新组件内部处理）
+
+**3. 修改 `parsers/ann-parser.ts`**
+- 新增 `getTagById(tagId, ann)` - 从标注中查找 tag（用于表格组件）
+- 删除重复的 `getLinkedRtags` 定义（保留原有实现）
+
+**4. AttributeEditor 子组件**
+- 根据 DtdAttr.vtype 渲染不同控件
+- 过滤内置属性（tag/id/spans/text/type）
+- idref 类型显示 `id | text` 格式（便于选择）
+- 所有控件点击时停止事件冒泡
+
+### 数据流
+
+**属性编辑**：
+```
+用户修改 Select/Input
+  ↓
+onChange → updateTagAttr(tagId, attrName, value)
+  ↓
+store 更新 ann.tags[i][attrName] + ann._has_saved = false
+  ↓
+React 重新渲染表格
+```
+
+**删除流程**：
+```
+点击删除按钮
+  ↓
+handleDelete(tagId)
+  ↓
+getLinkedRtags(tagId, ann) → 查找关联关系（O(n×m)）
+  ↓
+if (linkedRtags.length === 0):
+  removeTag(tagId) → message.success()
+else:
+  Modal.confirm() → 显示关联列表
+    ↓ 用户确认
+  linkedRtags.forEach(rtag => removeTag(rtag.id))  ← 先删除关系
+  removeTag(tagId)  ← 再删除实体
+```
+
+**点击行高亮**：
+```
+点击表格行
+  ↓
+handleRowClick(tagId) → setSelectedTagId(tagId)
+  ↓
+表格行：isSelected ? '#e6f7ff' : 'transparent'
+编辑器：CM6 setSelectedTag effect → 3px border + glow 动画
+```
+
+### 关键技术讨论
+
+**1. 关系存储机制**
+
+用户理解了关系标注的存储原理：
+- **Schema 定义**：`<!ATTLIST LK_SYMPTOM_DISEASE arg0 IDREF prefix="SYMPTOM">`
+- **XML 存储**：`<LK_SYMPTOM_DISEASE id="L0" SYMPTOMID="S1" DISEASEID="D0" .../>`
+- **内存表示**：`{ id: "L0", tag: "LK_SYMPTOM_DISEASE", SYMPTOMID: "S1", DISEASEID: "D0", ... }`
+- **引用机制**：通过字符串 ID 引用，不需要数据库
+
+**2. 时间复杂度分析**
+
+用户询问 `getLinkedRtags` 的性能：
+- **复杂度**：O(n × m)，n=标注数，m=属性数
+- **实际场景**：
+  - 典型：200 标注 × 8 属性 = 1,600 次比较 → 0.03ms
+  - 极端：1,000 标注 × 10 属性 = 10,000 次比较 → 0.2ms
+- **调用频率**：低频（只在删除时调用）
+- **原版实现**：同样的 O(n×m) 暴力遍历，5年未优化
+- **结论**：性能完全够用，不需要优化
+
+**3. 反向索引和双向图**
+
+用户理解了图的数据结构：
+- **当前实现**：单向图（只有正向引用）
+  - 正向查询：L0 引用了谁？→ O(m)（遍历属性）
+  - 反向查询：谁引用了 D0？→ O(n×m)（遍历所有标注）
+- **反向索引**：构建入边表 `tagReferences: { "D0": ["L0", "L1"] }`
+- **双向图**：正向引用 + 反向索引 = 可双向查询
+  - 反向查询优化为 O(1)
+  - 代价：增加空间和维护复杂度
+- **结论**：当前数据规模小 + 删除频率低，不需要反向索引
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试全部通过
+- ✅ 浏览器测试（用户确认）：
+  - 属性编辑正常（list/text/idref）
+  - 删除功能正常（直接删除 + 级联删除）
+  - 点击行高亮正常（表格 + 编辑器双向同步）
+
+### 文件变更统计
+
+| 文件 | 状态 | 行数 | 说明 |
+|------|------|------|------|
+| `components/AnnotationTable.tsx` | 新增 | 250 | 独立表格组件 + 属性编辑 + 删除 |
+| `components/Annotation.tsx` | 修改 | -70 | 移除旧表格，导入新组件 |
+| `parsers/ann-parser.ts` | 修改 | +11 | 新增 getTagById() |
+
+### 下一步
+
+**Phase 5: 关系标注链接**（推荐 Opus）
+- 点击实体标注 → 显示可用关系类型
+- 选择关系类型 → 进入链接模式 → 显示提示横幅
+- 点击第二个实体 → 创建关系标注
+- 状态机管理：isLinking / linkingTagDef / linkingTag / linkingAtts
+
+---
+
 ## M4 架构计划 — 标注编辑器（剩余 Phase）
 
 ### 7 个 Phase 进度
 
 - [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
 - [x] Phase 2: CM6 核心集成 ✅ (9984b6b)
-- [x] Phase 3: 右键菜单 + 实体创建 ✅ (待提交)
-- [ ] Phase 4: 标注表格交互增强
+- [x] Phase 3: 右键菜单 + 实体创建 ✅ (984c21b)
+- [x] Phase 4: 标注表格交互增强 ✅ (待提交)
 - [ ] Phase 5: 关系标注链接
 - [ ] Phase 6: 关系连线渲染
 - [ ] Phase 7: 保存 + 收尾
