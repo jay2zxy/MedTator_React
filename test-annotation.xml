@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<MEDICAL_SYMPTOMS>
+<TEXT><![CDATA[Patient reports severe headache and dizziness after taking aspirin for chronic migraine. Blood pressure elevated at 160/95.]]></TEXT>
+<TAGS>
+<SYMPTOM spans="15~21" text="severe" id="S0" certainty="positive" severity="severe" comment="NA"/>
+<SYMPTOM spans="22~30" text="headache" id="S1" certainty="positive" severity="severe" comment="NA"/>
+<SYMPTOM spans="35~44" text="dizziness" id="S2" certainty="positive" severity="moderate" comment="NA"/>
+<MEDICATION spans="58~65" text="aspirin" id="M0" dosage="unknown" frequency="daily" comment="NA"/>
+<DISEASE spans="70~86" text="chronic migraine" id="D0" status="current" comment="NA"/>
+<LK_SYMPTOM_DISEASE id="L0" SYMPTOMID="S1" SYMPTOMText="headache" DISEASEID="D0" DISEASEText="chronic migraine" relation_type="caused_by" comment="NA"/>
+<LK_MED_DISEASE id="L1" MEDICATIONID="M0" MEDICATIONText="aspirin" DISEASEID="D0" DISEASEText="chronic migraine" relation_type="treats" comment="NA"/>
+</TAGS>
+<META/>
+</MEDICAL_SYMPTOMS>

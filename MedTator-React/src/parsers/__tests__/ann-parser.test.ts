@@ -7,7 +7,7 @@ import {
   NON_CONSUMING_SPANS,
 } from '../ann-parser'
 import { parseDtd } from '../dtd-parser'
-import type { Ann, AnnTag } from '../../types'
+import type { Ann } from '../../types'
 
 // ── Sample data ──
 

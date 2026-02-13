@@ -217,10 +217,10 @@ MedTator-React/src/
 - [x] 单元测试：Vitest + jsdom，67个测试全部通过
 - [x] 用sample/数据验证（DTD解析、roundtrip、BRAT数据生成）
 
-#### M3-状态管理 + 文件操作 (3天) - 🚧 进行中
-- [x] store.ts 完善（对应vpp_data 30+属性）✅ Step 1 完成
-- [ ] 浏览器文件操作（先用input+drag&drop，Electron后面再换）
-- [ ] ZIP打包（JSZip）
+#### M3-状态管理 + 文件操作 (3天) - 🚧 进行中 (83%)
+- [x] store.ts 完善（对应vpp_data 30+属性）✅ Step 1 完成 (2026-02-12)
+- [x] 浏览器文件操作（input+drag&drop，Schema/Annotation加载+UI更新）✅ Step 2 完成 (2026-02-12)
+- [ ] ZIP打包（JSZip）- 可选
 
 #### M4-标注编辑器 (12天) ⭐ 核心
 - [ ] 文件列表 + CodeMirror编辑器

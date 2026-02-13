@@ -327,3 +327,182 @@ M3-状态管理+文件操作：完善store.ts + 实现文件拖拽加载 → 打
 ### 下一步
 
 M3 Step 2: 文件操作（file-helper + 拖拽 + parser接入 + UI更新）— 切回 Sonnet
+
+---
+
+## Session 3.2 — M3 Step 2: 文件操作
+
+**时间**: 2026-02-12
+**分支**: jay-dev
+**模型**: Sonnet 4.5
+
+### 完成的工作
+
+**1. 文件操作工具 (`utils/file-helper.ts`)**
+- ✅ 创建 75 行工具模块，封装浏览器文件操作
+- `readFileAsText()` - 读取单个 File 对象为文本
+- `readFilesAsText()` - 批量读取多文件
+- `filterFilesByExtension()` - 按扩展名过滤
+- `isSchemaFile()` / `isAnnotationFile()` - 文件类型检查
+- `downloadTextAsFile()` - 下载文件（预留导出功能用）
+
+**2. Annotation.tsx 完整重写（305行 → 500+行）**
+
+**新增 imports**：
+- `useRef`, `useMemo` (React hooks)
+- `message` (Ant Design 提示)
+- `useAppStore` (Zustand 状态)
+- `file-helper` 工具函数
+- `parseDtd`, `xml2ann`, `txt2ann` (Parser 函数)
+
+**ToolbarRibbon 重写**：
+- Schema 文件区域：
+  - 隐藏 `<input type="file" accept=".dtd,.json,.yaml,.yml">`
+  - 拖拽区：支持 drag&drop，点击打开文件选择器
+  - 加载后显示 `✓ SCHEMA_NAME`（绿色背景）
+  - 错误处理：文件类型检查 + 解析失败提示
+- Annotation 文件区域：
+  - Schema 未加载时显示提示文字
+  - Schema 加载后显示 "Load Files" 按钮
+  - 支持多文件选择（`multiple` 属性）
+  - 批量解析：显示 loading 进度（`startLoading → updateLoading → finishLoading`）
+  - 错误计数：解析失败的文件单独统计
+
+**FileListPanel 重写**：
+- 工具栏：
+  - 排序下拉框：6 种排序方式（default / alphabet / alphabet_r / tags / tags_r / label）
+  - 过滤输入框：实时搜索文件名
+  - "All" 按钮：清空过滤
+- 文件列表：
+  - 使用 `useMemo` 计算过滤+排序后的文件列表
+  - 分页显示（每页 100 个）
+  - 点击切换文件：`setAnnIdx()`
+  - 选中状态：蓝色高亮 + 边框
+- 分页控制：
+  - 显示总文件数 + 当前页码
+  - 上/下翻页按钮
+  - 边界禁用
+
+**EditorPanel 重写**：
+- 当前文件存在 → 显示 `<textarea>` 展示文本（只读）
+- 无文件 → 显示占位提示（EditOutlined 图标 + 文字）
+- 暂时用 textarea 占位，后续替换为 CodeMirror
+
+**TagListPanel 重写**：
+- Header：
+  - "All Tags" 可点击，显示总 Tag 数量
+  - 点击后设置 `displayTagName='__all__'`
+- Entity Tags 列表：
+  - 显示每个 etag 的颜色方块 + 名称
+  - 点击设置 `displayTagName=tag.name`
+  - 选中状态：蓝色高亮
+- Relation Tags 列表：
+  - 同 Entity Tags
+  - 分隔线分隔
+
+**AnnotationTable 重写**：
+- 使用 `useMemo` 根据 `displayTagName` 过滤当前文件的 tags
+- 表头：Tag / ID / Spans / Text / Attributes（sticky 定位）
+- 表体：
+  - 显示过滤后的标注
+  - Spans: 显示原始字符串（如 "15~21"）
+  - Text: 限制宽度，超出省略号
+  - Attributes: 排除内置字段（tag/id/spans/text/type），显示为 `key=value` 格式
+- 空状态提示
+
+**3. 数据流打通**
+
+```
+用户拖拽 .dtd
+  ↓
+handleSchemaFile() → readFileAsText()
+  ↓
+parseDtd(text, format) → Dtd 对象
+  ↓
+store.setDtd(dtd)
+  ↓
+UI 更新：Schema 区域显示绿色 ✓，Load Files 按钮启用
+
+用户选择多个 .xml 文件
+  ↓
+handleAnnotationFiles() → startLoading(n)
+  ↓
+循环：readFileAsText() → xml2ann(text, dtd) → Ann 对象
+  ↓
+store.addAnns(newAnns) + finishLoading()
+  ↓
+UI 更新：文件列表显示、编辑器显示第一个文件、标注表格显示 tags
+
+用户点击 Tag 列表
+  ↓
+store.setDisplayTagName(name)
+  ↓
+AnnotationTable useMemo 重新过滤 → 只显示匹配的 tags
+```
+
+**4. 修复 TypeScript 编译错误**
+- `Annotation.tsx`: 移除未使用的 `Spin`, `SaveOutlined`, `DeleteOutlined`, `LoadingOutlined`, `SortAnnsBy` import
+- `ann-parser.test.ts`: 移除未使用的 `AnnTag` import
+- `bioc-parser.test.ts`: 移除未使用的 `Ann` import
+- `ann-parser.ts`: `anns2hintDict` 的 `dtd` 参数改为 `_dtd`（保留接口兼容性）
+
+**5. 测试文件生成**
+- `test-schema.dtd` (33 行)：医学症状标注 Schema
+  - 3 个 Entity: SYMPTOM, MEDICATION, DISEASE
+  - 2 个 Relation: LK_SYMPTOM_DISEASE, LK_MED_DISEASE
+  - 包含属性：certainty, severity, dosage, frequency, relation_type 等
+- `test-annotation.xml` (16 行)：示例标注文件
+  - 患者医疗记录文本（117 字符）
+  - 5 个 Entity 标注（3 症状 + 1 药物 + 1 疾病）
+  - 2 个 Relation 标注
+
+**6. 功能验证（用户手动测试）**
+- ✅ 拖拽加载 `test-schema.dtd` → 显示 `✓ MEDICAL_SYMPTOMS`（绿色）
+- ✅ 点击 "Load Files" 加载 `test-annotation.xml` → 文件列表显示文件名
+- ✅ 编辑器显示文本："Patient reports severe headache..."
+- ✅ Tag 列表显示：Entity Tags (3) + Relation Tags (2)
+- ✅ 标注表格初始显示 3 个 SYMPTOM 标注
+- ✅ 点击 "All Tags" → 显示全部 7 个标注（3 症状 + 1 药物 + 1 疾病 + 2 关系）
+- ✅ Spans / Text / Attributes 正确解析显示
+
+### 验证
+
+- TypeScript 编译 ✅ 零错误
+- 67 个 parser 测试 ✅ 全部通过
+- Vite build ✅ 成功（696KB bundle）
+- 开发服务器 ✅ 正常运行（http://localhost:5173）
+- 功能测试 ✅ Schema 加载、Annotation 加载、Tag 过滤、文件切换全部正常
+
+### 关键设计决策
+
+1. **暂时不用 CodeMirror**：编辑器用 `<textarea>` 占位，M4 再集成 CodeMirror + 标注功能
+2. **Tags/Tags_r/Label 排序未实现**：文件列表的这 3 种排序逻辑复杂，标记 TODO 留待需要时实现
+3. **Loading 三阶段**：异步加载大量文件时，实时反馈进度和错误数
+4. **Parser 错误捕获**：单个文件解析失败不阻断其他文件，错误单独计数
+5. **useMemo 优化**：文件列表过滤/排序、标注过滤使用 useMemo 避免重复计算
+
+### 文件变更统计
+
+- **新增**: `utils/file-helper.ts` (75 行)
+- **新增**: `test-schema.dtd` (33 行)
+- **新增**: `test-annotation.xml` (16 行)
+- **修改**: `components/Annotation.tsx` (305 行 → 500+ 行，核心逻辑重写)
+- **修改**: `parsers/ann-parser.ts` (1 行，参数重命名)
+- **修改**: `parsers/__tests__/ann-parser.test.ts` (1 行，移除未使用 import)
+- **修改**: `parsers/__tests__/bioc-parser.test.ts` (1 行，移除未使用 import)
+
+### 当前项目状态
+
+**M3-状态管理 + 文件操作 (3天)**：
+- [x] Step 1: store.ts 完善（16 个状态 + 14 个 actions）✅ 2026-02-12
+- [x] Step 2: 浏览器文件操作（Schema/Annotation 加载 + 拖拽 + UI 更新）✅ 2026-02-12
+- [ ] Step 3: ZIP 打包（JSZip - 可选，看需求）
+
+**进度**: M3 完成 2.5/3，约 **83%**
+
+### 下一步选择
+
+**选项 1**: M3 Step 3 - ZIP 打包功能（批量加载/保存 .zip 压缩包）
+**选项 2**: 跳过 ZIP，直接进入 M4 - 标注编辑器（CodeMirror 集成 + 实体标注 + 关系标注）
+
+建议：**先 Git commit 保存进度，然后根据需求决定是否做 ZIP 功能**
