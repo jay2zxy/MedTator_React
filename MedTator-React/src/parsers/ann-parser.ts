@@ -480,13 +480,17 @@ export function getLocs(str: string, text: string): number[][] {
 
 export function getNextTagId(ann: Ann, tagDef: { name: string; id_prefix: string }): string {
   let n = 0
+  const prefix = tagDef.id_prefix
   for (const tag of ann.tags) {
-    if (tag.tag === tagDef.name) {
-      const _id = parseInt(tag.id.replace(tagDef.id_prefix, ''))
-      if (_id >= n) n = _id + 1
+    // Check ALL tags with the same prefix (not just same name)
+    // to prevent ID collisions between tag types sharing a prefix (e.g. L0, L1)
+    if (tag.id.startsWith(prefix)) {
+      const numStr = tag.id.slice(prefix.length)
+      const _id = parseInt(numStr)
+      if (!isNaN(_id) && _id >= n) n = _id + 1
     }
   }
-  return tagDef.id_prefix + n
+  return prefix + n
 }
 
 export function getTagByTagId(tagId: string, ann: Ann): AnnTag | null {

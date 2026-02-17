@@ -938,6 +938,104 @@ handleRowClick(tagId) → setSelectedTagId(tagId)
 
 ---
 
+## Session 4.5 — M4 Phase 5: 关系标注链接
+
+**时间**: 2026-02-17
+**分支**: jay-dev
+**模型**: Opus 4.6
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 修复 store.ts 链接状态机**
+- `startLinking`: 初始化所有属性默认值（含IDREF），消费第一个 IDREF 后只存剩余的到 `linkingAtts`
+- `setLinking`: 填入 IDREF 后从 `linkingAtts` 移除，为空时自动调用 `doneLinking()`
+- `doneLinking`: 改用 `getNextTagId()` 替代重复的 ID 生成逻辑
+- 新增 `updateLinkingAttr(attrName, value)`: 供 LinkingBanner 编辑非 IDREF 属性
+
+**2. 新建 `components/TagPopupMenu.tsx`（~210行）**
+- React Portal 浮层，点击实体标记时显示
+- 两种渲染模式：
+  - **未链接时**: tag info header + 关系类型列表 + 删除选项
+  - **链接中**: tag info header + 剩余 IDREF 属性列表 + 取消链接
+- 点击关系类型 → `startLinking(rtag, tagId)`
+- 点击 IDREF 属性 → `setLinking(idx, tagId)` → 自动完成
+- Escape / 点击外部关闭（跳过对其他 entity mark 的点击，允许菜单更新）
+
+**3. 新建 `components/LinkingBanner.tsx`（~170行）**
+- 可拖拽浮动面板（absolute 定位，mousedown 拖拽实现）
+- Header: "Creating a Link Tag **{name}**"
+- Done Linking / Cancel 按钮
+- 属性行：IDREF→Select（带 `popupMatchSelectWidth={false}`）, list→Select, text→Input
+- 通过 `updateLinkingAttr` 实时编辑
+
+**4. 修改 `components/AnnotationEditor.tsx`**
+- 新增 `tagMenu` 状态（visible, x, y, tagId）
+- `mousedown` handler: 左键点击 entity mark → `setSelectedTagId` + 显示 TagPopupMenu
+- `contextmenu` handler: 右键文本选择 → 显示 ContextMenu（原有）
+- 用 `useRef` 存 setState 引用避免闭包过期
+- 用 `useAppStore.getState()` 在事件处理器中读最新状态
+- 渲染 LinkingBanner + TagPopupMenu
+
+### Bug 修复
+
+**1. ID 碰撞 bug（原版也有）**
+- 问题：`LK_SYMPTOM_DISEASE` 和 `LK_MED_DISEASE` 共享前缀 "L"，原版 `get_next_tag_id` 按 tag name 计数，不同类型会生成相同 ID
+- 修复：`getNextTagId()` 改为 `tag.id.startsWith(prefix)` 检查所有同前缀 tag
+- `doneLinking` 改用 `getNextTagId()` 替代内联重复逻辑
+
+**2. IDREF 下拉框显示关系标注**
+- 问题：`t.type === 'etag' || !t.type` 过滤不可靠，L0/L1/L2 出现在下拉框
+- 修复：改用 `dtd.tag_dict[t.tag]?.type === 'etag'` 过滤（AnnotationTable + LinkingBanner）
+
+**3. IDREF 下拉框文本截断**
+- 问题：下拉弹窗宽度跟输入框，长文本被截断
+- 修复：添加 `popupMatchSelectWidth={false}`
+
+**4. 标注表格表头重叠**
+- 问题：sticky 表头无 z-index，滚动时内容穿过
+- 修复：添加 `zIndex: 1`
+
+### 完整交互流程
+
+```
+点击 S1 (SYMPTOM) → TagPopupMenu 显示关系类型
+  → 选 LK_SYMPTOM_DISEASE → startLinking(rtag, "S1")
+  → LinkingBanner 出现（arg0=S1, arg1=空, relation_type=associated_with）
+  → 点击 D0 (DISEASE) → TagPopupMenu 显示 "LK_SYMPTOM_DISEASE - arg1"
+  → 点击 "arg1" → setLinking(0, "D0") → linkingAtts 为空 → doneLinking()
+  → 关系标注 L2 创建，出现在表格
+```
+
+### 验证
+
+- TypeScript 编译 ✅ 零错误
+- 75 个测试 ✅ 全部通过
+- 浏览器测试 ✅：
+  - 点击实体标记 → 弹出关系类型菜单
+  - 选择关系类型 → LinkingBanner 出现，可拖拽
+  - 点击第二个实体 → 填入 IDREF → 自动完成
+  - 关系出现在标注表格
+  - Done Linking / Cancel 按钮正常
+  - IDREF 下拉框只显示实体标注
+
+### 文件变更统计
+
+| 文件 | 状态 | 行数 | 说明 |
+|------|------|------|------|
+| `store.ts` | 修改 | +15 | 修复链接状态机 + updateLinkingAttr |
+| `components/TagPopupMenu.tsx` | 新增 | ~210 | 实体标记点击弹出菜单 |
+| `components/LinkingBanner.tsx` | 新增 | ~170 | 链接模式浮动面板 |
+| `components/AnnotationEditor.tsx` | 重写 | ~310 | 集成 TagPopupMenu + LinkingBanner |
+| `components/AnnotationTable.tsx` | 修改 | +5 | IDREF 过滤 + popupMatchSelectWidth + zIndex |
+| `parsers/ann-parser.ts` | 修改 | +5 | getNextTagId 按前缀查重 |
+
+### 下一步
+
+**Phase 6: 关系连线渲染**（推荐 Sonnet）
+
+---
+
 ## M4 架构计划 — 标注编辑器（剩余 Phase）
 
 ### 7 个 Phase 进度
@@ -945,8 +1043,8 @@ handleRowClick(tagId) → setSelectedTagId(tagId)
 - [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
 - [x] Phase 2: CM6 核心集成 ✅ (9984b6b)
 - [x] Phase 3: 右键菜单 + 实体创建 ✅ (984c21b)
-- [x] Phase 4: 标注表格交互增强 ✅ (待提交)
-- [ ] Phase 5: 关系标注链接
+- [x] Phase 4: 标注表格交互增强 ✅ (cc604c8)
+- [x] Phase 5: 关系标注链接 ✅ (待提交)
 - [ ] Phase 6: 关系连线渲染
 - [ ] Phase 7: 保存 + 收尾
 

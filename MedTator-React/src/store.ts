@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Dtd, Ann, AnnTag, DtdTag, DtdAttr } from './types'
+import { getNextTagId } from './parsers/ann-parser'
 
 // ── Exported Types ──
 
@@ -81,6 +82,7 @@ interface AppState {
   linkingAtts: DtdAttr[]
   startLinking: (rtagDef: DtdTag, firstEntityId: string) => void
   setLinking: (attIndex: number, entityId: string) => void
+  updateLinkingAttr: (attrName: string, value: string) => void
   doneLinking: () => void
   cancelLinking: () => void
 
@@ -228,28 +230,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const idrefAttrs = rtagDef.attrs.filter((att) => att.vtype === 'idref')
 
-    // Create partial rtag with first entity
+    // Create partial rtag with ALL attributes set to defaults
     const partialTag: Partial<AnnTag> = {
       tag: rtagDef.name,
     }
 
-    // Set first IDREF attribute
-    if (idrefAttrs.length > 0) {
-      partialTag[idrefAttrs[0].name] = firstEntityId
+    for (const att of rtagDef.attrs) {
+      if (att.name === 'spans') continue
+      partialTag[att.name] = att.default_value
     }
 
-    // Initialize with default values for non-IDREF attributes
-    for (const att of rtagDef.attrs) {
-      if (att.vtype !== 'idref' && att.name !== 'spans') {
-        partialTag[att.name] = att.default_value
-      }
+    // Override first IDREF attribute with clicked entity
+    if (idrefAttrs.length > 0) {
+      partialTag[idrefAttrs[0].name] = firstEntityId
     }
 
     set({
       isLinking: true,
       linkingTagDef: rtagDef,
       linkingTag: partialTag,
-      linkingAtts: idrefAttrs,
+      linkingAtts: idrefAttrs.slice(1), // Remove first (already consumed)
     })
   },
 
@@ -262,7 +262,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       [linkingAtts[attIndex].name]: entityId,
     }
 
-    set({ linkingTag: updatedTag })
+    const remainingAtts = linkingAtts.filter((_, i) => i !== attIndex)
+
+    // Update tag and remaining attrs
+    set({ linkingTag: updatedTag, linkingAtts: remainingAtts })
+
+    // Auto-complete if all IDREFs filled
+    if (remainingAtts.length === 0) {
+      get().doneLinking()
+    }
+  },
+
+  updateLinkingAttr: (attrName, value) => {
+    const { linkingTag } = get()
+    if (!linkingTag) return
+    set({ linkingTag: { ...linkingTag, [attrName]: value } })
   },
 
   doneLinking: () => {
@@ -271,17 +285,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const ann = anns[annIdx]
 
-    // Generate ID
-    let n = 0
-    for (const tag of ann.tags) {
-      if (tag.tag === linkingTagDef.name) {
-        const _id = parseInt(tag.id.replace(linkingTagDef.id_prefix, ''))
-        if (_id >= n) n = _id + 1
-      }
-    }
-
     const completeTag: AnnTag = {
-      id: linkingTagDef.id_prefix + n,
+      id: getNextTagId(ann, linkingTagDef),
       tag: linkingTagDef.name,
       ...linkingTag,
     }

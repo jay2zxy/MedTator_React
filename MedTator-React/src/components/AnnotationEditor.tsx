@@ -3,8 +3,13 @@
  *
  * Replaces the placeholder <textarea> in EditorPanel.
  * Displays read-only text with colored entity tag highlights.
+ *
+ * Interactions:
+ * - Right-click on text selection → ContextMenu (entity creation)
+ * - Left-click on entity mark → TagPopupMenu (relation linking / delete)
+ * - During linking mode → LinkingBanner (floating attribute panel)
  */
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { EditOutlined } from '@ant-design/icons'
@@ -15,6 +20,8 @@ import { injectTagColors } from '../editor/cm-theme'
 import { cmRangeToSpans } from '../editor/cm-spans'
 import { makeEtag } from '../utils/tag-helper'
 import ContextMenu from './ContextMenu'
+import TagPopupMenu from './TagPopupMenu'
+import LinkingBanner from './LinkingBanner'
 import type { DtdTag } from '../types'
 
 export default function AnnotationEditor() {
@@ -26,13 +33,12 @@ export default function AnnotationEditor() {
   const dtd = useAppStore((s) => s.dtd)
   const displayTagName = useAppStore((s) => s.displayTagName)
   const selectedTagId = useAppStore((s) => s.selectedTagId)
-  const setSelectedTagId = useAppStore((s) => s.setSelectedTagId)
   const addTag = useAppStore((s) => s.addTag)
   const markMode = useAppStore((s) => s.cm.markMode)
 
   const currentAnn = annIdx !== null && annIdx < anns.length ? anns[annIdx] : null
 
-  // Context menu state
+  // Context menu state (right-click on text selection → entity creation)
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean
     x: number
@@ -44,6 +50,25 @@ export default function AnnotationEditor() {
     y: 0,
     selection: null,
   })
+
+  // Tag popup menu state (left-click on entity mark → relation/delete)
+  const [tagMenu, setTagMenu] = useState<{
+    visible: boolean
+    x: number
+    y: number
+    tagId: string | null
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    tagId: null,
+  })
+
+  // Stable callbacks for CM6 event handlers (avoid stale closures)
+  const setContextMenuRef = useRef(setContextMenu)
+  setContextMenuRef.current = setContextMenu
+  const setTagMenuRef = useRef(setTagMenu)
+  setTagMenuRef.current = setTagMenu
 
   // ── Initialize CM6 (once) ──
 
@@ -58,12 +83,17 @@ export default function AnnotationEditor() {
         // Get current selection
         const selection = view.state.selection.main
 
-        // Only show menu if text is selected
+        // Only show entity creation menu if text is selected
         if (selection.from === selection.to) {
           return false
         }
 
-        setContextMenu({
+        // Close tag popup if open
+        setTagMenuRef.current((prev) =>
+          prev.visible ? { ...prev, visible: false } : prev
+        )
+
+        setContextMenuRef.current({
           visible: true,
           x: event.clientX,
           y: event.clientY,
@@ -73,18 +103,40 @@ export default function AnnotationEditor() {
         return true
       },
       mousedown: (event: MouseEvent) => {
-        // Check if clicking on a tag mark
+        // Check if clicking on an entity tag mark
         const target = event.target as HTMLElement
-        const tagId = target.getAttribute('data-tag-id')
+        const tagEl = target.closest('[data-tag-id]') as HTMLElement
 
-        if (tagId) {
-          setSelectedTagId(tagId)
+        if (tagEl) {
+          const tagId = tagEl.getAttribute('data-tag-id')!
+
+          // Set selected tag (highlights in editor + table)
+          useAppStore.getState().setSelectedTagId(tagId)
+
+          // Close entity creation menu if open
+          setContextMenuRef.current((prev) =>
+            prev.visible ? { ...prev, visible: false } : prev
+          )
+
+          // Show tag popup menu
+          setTagMenuRef.current({
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            tagId,
+          })
+
           return true
         }
 
-        // Clear selection if clicking elsewhere
-        if (selectedTagId) {
-          setSelectedTagId(null)
+        // Clicking elsewhere — close menus and clear selection
+        setTagMenuRef.current((prev) =>
+          prev.visible ? { ...prev, visible: false } : prev
+        )
+
+        const store = useAppStore.getState()
+        if (store.selectedTagId) {
+          store.setSelectedTagId(null)
         }
 
         return false
@@ -161,41 +213,38 @@ export default function AnnotationEditor() {
     }
   }, [anns, annIdx, dtd, displayTagName, selectedTagId])
 
-  // ── Handle context menu tag selection ──
+  // ── Handle context menu tag selection (entity creation) ──
 
-  const handleTagSelect = (tagDef: DtdTag) => {
-    if (!contextMenu.selection || !currentAnn || !dtd) return
+  const handleTagSelect = useCallback(
+    (tagDef: DtdTag) => {
+      if (!contextMenu.selection || !currentAnn || !dtd) return
 
-    const view = viewRef.current
-    if (!view) return
+      const view = viewRef.current
+      if (!view) return
 
-    const { from, to } = contextMenu.selection
+      const { from, to } = contextMenu.selection
 
-    // Get selected text
-    const text = view.state.doc.sliceString(from, to)
+      // Get selected text
+      const text = view.state.doc.sliceString(from, to)
 
-    // Create spans string
-    const spans = cmRangeToSpans(from, to)
+      // Create spans string
+      const spans = cmRangeToSpans(from, to)
 
-    // Create basic tag
-    const basicTag = {
-      spans,
-      text,
-    }
+      // Create full entity tag with auto-generated ID and default attributes
+      const tag = makeEtag({ spans, text }, tagDef, currentAnn)
 
-    // Create full entity tag with auto-generated ID and default attributes
-    const tag = makeEtag(basicTag, tagDef, currentAnn)
+      // Add tag to current annotation
+      addTag(tag)
 
-    // Add tag to current annotation
-    addTag(tag)
+      // Clear CM6 selection
+      view.dispatch({
+        selection: { anchor: from },
+      })
 
-    // Clear CM6 selection
-    view.dispatch({
-      selection: { anchor: from },
-    })
-
-    console.log('* Created tag:', tag)
-  }
+      console.log('* Created tag:', tag)
+    },
+    [contextMenu.selection, currentAnn, dtd, addTag]
+  )
 
   // ── Render ──
   // Always render the container div so CM6 stays mounted.
@@ -237,7 +286,10 @@ export default function AnnotationEditor() {
         </div>
       )}
 
-      {/* Context menu */}
+      {/* Linking banner (floating panel during relation creation) */}
+      <LinkingBanner />
+
+      {/* Entity creation context menu (right-click on text selection) */}
       <ContextMenu
         visible={contextMenu.visible}
         x={contextMenu.x}
@@ -245,6 +297,15 @@ export default function AnnotationEditor() {
         tags={dtd?.etags || []}
         onSelect={handleTagSelect}
         onClose={() => setContextMenu({ ...contextMenu, visible: false })}
+      />
+
+      {/* Tag popup menu (left-click on entity mark) */}
+      <TagPopupMenu
+        visible={tagMenu.visible}
+        x={tagMenu.x}
+        y={tagMenu.y}
+        tagId={tagMenu.tagId}
+        onClose={() => setTagMenu({ ...tagMenu, visible: false })}
       />
     </div>
   )

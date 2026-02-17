@@ -296,4 +296,31 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 
 ---
 
-*最后更新: 2026-02-13*
+### Session 4.5 — M4 Phase 5: 关系标注链接 (2026-02-17, Opus)
+
+**新增组件**：
+- `TagPopupMenu.tsx` (~210行)：点击实体标记弹出菜单（关系类型/链接IDREF/删除）
+- `LinkingBanner.tsx` (~170行)：链接模式可拖拽浮动面板（属性编辑 + Done/Cancel）
+- `AnnotationEditor.tsx` 重写：集成两个新组件 + 左键/右键事件分流
+
+**Store 修复**：
+- `startLinking`/`setLinking`: 修复消费逻辑，IDREF 全填后自动完成
+- `doneLinking`: 改用 `getNextTagId()` 替代重复逻辑
+- 新增 `updateLinkingAttr`: 供 banner 编辑属性
+
+**Bug 修复**：
+- ID 碰撞：共享前缀的不同 relation type 会生成重复 ID（原版也有此 bug），改为按前缀查重
+- IDREF 下拉框误显示关系标注（L0/L1）：改用 DTD 判断 etag
+- IDREF 下拉框文本截断：`popupMatchSelectWidth={false}`
+- 表格表头 sticky 重叠：加 `zIndex: 1`
+
+**验证**：
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试全部通过
+- ✅ 浏览器测试：完整链接流程（点击实体→选关系→点击实体→自动创建）
+
+**下一步**：Phase 6 关系连线渲染（推荐 Sonnet）
+
+---
+
+*最后更新: 2026-02-17*

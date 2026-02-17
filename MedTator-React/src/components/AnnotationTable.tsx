@@ -111,6 +111,7 @@ export default function AnnotationTable() {
               borderBottom: '1px solid #e9e9e9',
               position: 'sticky',
               top: 0,
+              zIndex: 1,
             }}
           >
             <th style={{ textAlign: 'left', padding: '4px 8px', width: 90 }}>Tag</th>
@@ -209,6 +210,7 @@ interface AttributeEditorProps {
 function AttributeEditor({ tag, tagDef, onChange }: AttributeEditorProps) {
   const anns = useAppStore((s) => s.anns)
   const annIdx = useAppStore((s) => s.annIdx)
+  const dtd = useAppStore((s) => s.dtd)
   const currentAnn = annIdx !== null ? anns[annIdx] : null
 
   if (!tagDef.attrs || tagDef.attrs.length === 0) return null
@@ -247,12 +249,16 @@ function AttributeEditor({ tag, tagDef, onChange }: AttributeEditorProps) {
             <Select
               size="small"
               style={{ flex: 1, minWidth: 100 }}
+              popupMatchSelectWidth={false}
               value={tag[attr.name] || ''}
               onChange={(value) => onChange(tag.id, attr.name, value)}
               onClick={(e) => e.stopPropagation()}
             >
               {currentAnn?.tags
-                .filter((t) => t.type === 'etag' || !t.type)
+                .filter((t) => {
+                  const def = dtd?.tag_dict[t.tag]
+                  return def?.type === 'etag'
+                })
                 .map((t) => (
                   <Select.Option key={t.id} value={t.id}>
                     {t.id} | {t.text}
