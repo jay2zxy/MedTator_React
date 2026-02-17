@@ -1030,9 +1030,83 @@ handleRowClick(tagId) → setSelectedTagId(tagId)
 | `components/AnnotationTable.tsx` | 修改 | +5 | IDREF 过滤 + popupMatchSelectWidth + zIndex |
 | `parsers/ann-parser.ts` | 修改 | +5 | getNextTagId 按前缀查重 |
 
+
+## Session 4.6 — M4 Phase 6: 关系连线渲染
+
+**时间**: 2026-02-17
+**分支**: jay-dev
+**模型**: Opus 4.6 → Sonnet 4.5
+**状态**: 完成
+
+### 完成的工作
+
+**1. 新建 `components/RelationLines.tsx` (~270行)**
+- SVG 覆盖层，绘制关系标注连线
+- `view.coordsAtPos()` 获取实体坐标 → 容器相对坐标
+- 4点折线算法：A顶部 → A上方 → B上方 → B顶部
+- 彩色标签背景（`.svgmark-tag-{TAG}` 动态 CSS）
+- 响应滚动/resize/数据变化自动重算
+
+**2. 集成到 `AnnotationEditor.tsx`**
+- 传递 `viewRef` 给 RelationLines
+- 渲染在编辑器容器内（绝对定位 overlay）
+
+**3. 工具栏开关 (`Annotation.tsx`)**
+- Show Links / Show Lines / Show Link Name
+
+**4. 调整样式**
+- `deltaHeight` 6px（连线距标注上方间距）
+- 标签 8px 字体，24×10 背景 rect
+- `.cm-gutters` 加 `lineHeight: '2em'` 对齐行号
+
+**5. 文件列表增强**
+- 显示文件数量 / tag 数量
+- 删除单个文件按钮（`MinusCircleOutlined`）
+- 删除全部按钮（红色 `DeleteOutlined` + "All"）
+- unsaved 标记（红色 `*` 号）
+
+### 技术难点
+
+**坐标系转换**：
+```typescript
+// viewport 绝对坐标 → 容器相对坐标
+const containerRect = container.getBoundingClientRect()
+return {
+  left: fromCoords.left - containerRect.left,
+  top: fromCoords.top - containerRect.top,
+  right: toCoords.right - containerRect.left,
+}
+```
+
+**时序问题**：
+- CM6 渲染完成后才能 `coordsAtPos()`
+- 用 `requestAnimationFrame` 延迟一帧
+- 边界检查 + try-catch 防止 "No tile" 错误
+
+**调试过程**：
+1. 连线在页面顶部 → 修复坐标偏移
+2. 加载时无连线 → 加 RAF 延迟
+3. 标签被裁掉 → 调整 deltaHeight 14→6
+4. 标签白色 → 改用关系类型颜色 CSS
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 测试通过
+- ✅ 浏览器测试：连线正确显示，工具栏开关正常，滚动跟随
+
+### 文件变更
+
+| 文件 | 状态 | 说明 |
+|------|------|------|
+| `components/RelationLines.tsx` | 新增 | SVG 连线组件 |
+| `components/AnnotationEditor.tsx` | 修改 | 集成 RelationLines |
+| `components/Annotation.tsx` | 修改 | 工具栏开关 + 文件列表增强 |
+| `editor/cm-theme.ts` | 修改 | gutter 行高对齐 |
+
 ### 下一步
 
-**Phase 6: 关系连线渲染**（推荐 Sonnet）
+**Phase 7: 保存 + 收尾** — Save 按钮 + Ctrl+S + XML 下载
 
 ---
 
@@ -1049,115 +1123,3 @@ handleRowClick(tagId) → setSelectedTagId(tagId)
 - [ ] Phase 7: 保存 + 收尾
 
 ---
-
-#### Phase 3: 右键菜单 + 实体创建
-
-**目标**：选中文本 → 右键 → 选标签类型 → 创建标注
-
-**`components/ContextMenu.tsx`**：
-- 浮层组件，React Portal 定位到鼠标坐标
-- 选中文本右键 → 列出 dtd.etags（颜色图标 + 名称 + 快捷键）
-- 点击标记右键 → 列出关系类型 + 删除选项
-- Escape / 点击外部关闭
-
-**创建流程**：
-```
-CM6 selection → cmRangeToSpans(from, to) → spans字符串
-→ makeEtag(basicTag, tagDef, currentAnn) → AnnTag
-→ store.addTag(tag) → useEffect 触发装饰重建
-```
-
-**CM6 事件绑定**：
-- `EditorView.domEventHandlers({ contextmenu, mousedown })`
-- contextmenu：阻止默认，显示菜单
-- mousedown：检测 data-tag-id 属性，设置 selectedTagId
-
-**验证**：选文本 → 右键 → 创建实体 → 编辑器和表格都显示新标注
-
----
-
-#### Phase 4: 标注表格交互增强
-
-**目标**：内联属性编辑 + 点击跳转 + 删除
-
-**从 Annotation.tsx 增强 AnnotationTable**：
-- 属性列根据 DtdAttr.vtype 渲染不同控件：
-  - `list` → `<Select>` + attr.values
-  - `text` → `<Input>`
-  - `idref` → `<Select>` 列出当前文件所有实体标注
-- 修改属性 → `store.updateTagAttr()`
-- 点击行 → CM6 `scrollIntoView` + `setSelectedTagId`
-- 删除按钮 → 检查关联 rtags → `Modal.confirm()` → `store.removeTag()`
-- 双向高亮：selectedTagId 同时影响编辑器和表格
-
-**验证**：修改属性 → 文件标记 unsaved。点击行 → 编辑器滚动。删除 → 表格和编辑器同步。
-
----
-
-#### Phase 5: 关系标注链接 ⭐ 复杂状态机
-
-**目标**：两阶段创建关系标注
-
-**流程**：
-1. 点击实体标记 → 弹出菜单显示可用关系类型
-2. 选择关系类型 → `startLinking(rtagDef, entityId)`
-3. 编辑器顶部显示链接指示条："Creating [RelType] — click next entity for arg1"
-4. 点击第二个实体 → `setLinking(0, entityId)`
-5. 如果还有更多 IDREF 属性 → 继续；否则 → `doneLinking()`
-6. 关系标注添加到 tags 数组
-
-**UI**：
-- 链接进行中显示浮动横幅
-- 菜单在链接模式下显示剩余属性 + 取消按钮
-- `cancelLinking()` 重置所有状态
-
-**验证**：创建两个实体 → 点击第一个 → 选关系类型 → 点击第二个 → 关系出现在表格
-
----
-
-#### Phase 6: 关系连线渲染
-
-**目标**：SVG 连线显示实体间关系
-
-- 绝对定位 SVG 覆盖在 CM6 上方（pointerEvents: none）
-- `view.coordsAtPos()` 获取实体标记位置
-- 绘制 polyline 连线 + 中点标签文字
-- 响应滚动和 resize 重新计算
-- 工具栏开关：Show Links / Show Lines
-
-**验证**：创建关系 → 连线出现。滚动 → 连线跟随。关闭开关 → 连线消失。
-
----
-
-#### Phase 7: 保存 + 收尾
-
-**目标**：文件保存 + 快捷键 + UI 打磨
-
-- Save 按钮：`ann2xml(ann, dtd)` → `xml2str()` → `downloadTextAsFile()`
-- Ctrl+S 快捷键
-- 文件列表 unsaved 标记（文件名前加 * 号）
-- Tag 快捷键（dtd.etags[i].shortcut → 选中文本时按键创建标注）
-- 标注颜色动态生成 CSS
-
-**验证**：修改标注 → * 号出现 → 保存 → 下载 XML → 重新加载验证内容一致
-
----
-
-### 模型分配
-
-| Phase | 模型 | 原因 |
-|-------|------|------|
-| Phase 1: Store + Helpers | Sonnet | 纯函数移植 + store 扩展，逻辑明确 |
-| Phase 2: CM6 核心 | **Opus** | 架构最复杂：StateField、装饰系统、React 集成 |
-| Phase 3: 右键菜单 + 实体创建 | Sonnet | UI 组件 + 事件绑定，模式已定 |
-| Phase 4: 表格交互 | Sonnet | 表单控件 + 事件处理 |
-| Phase 5: 关系链接 | **Opus** | 多步状态机，交互复杂 |
-| Phase 6: 关系连线 | Sonnet | SVG 绘制，逻辑清晰 |
-| Phase 7: 保存 + 收尾 | Sonnet | 功能明确，组合已有工具 |
-
-### 验证策略
-
-每个 Phase 完成后：
-1. `npm run build` — TypeScript 编译零错误
-2. `npm test` — 67 个旧测试 + 新测试全部通过
-3. `npm run dev` — 浏览器手动测试（加载 test-schema.dtd + test-annotation.xml）

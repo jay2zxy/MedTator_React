@@ -23,6 +23,7 @@ export const annotationTheme = EditorView.theme({
   '.cm-gutters': {
     backgroundColor: '#f5f5f5',
     borderRight: '1px solid #ddd',
+    lineHeight: '2em',
   },
   // Disable cursor blinking in readOnly mode
   '.cm-cursor': {

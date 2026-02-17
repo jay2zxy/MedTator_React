@@ -22,6 +22,7 @@ import { makeEtag } from '../utils/tag-helper'
 import ContextMenu from './ContextMenu'
 import TagPopupMenu from './TagPopupMenu'
 import LinkingBanner from './LinkingBanner'
+import RelationLines from './RelationLines'
 import type { DtdTag } from '../types'
 
 export default function AnnotationEditor() {
@@ -285,6 +286,9 @@ export default function AnnotationEditor() {
           </div>
         </div>
       )}
+
+      {/* Relation lines (SVG overlay) */}
+      <RelationLines viewRef={viewRef} />
 
       {/* Linking banner (floating panel during relation creation) */}
       <LinkingBanner />

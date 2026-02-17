@@ -13,6 +13,8 @@ import {
   EditOutlined,
   ToolOutlined,
   InfoCircleOutlined,
+  DeleteOutlined,
+  MinusCircleOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons'
 import { useAppStore } from '../store'
@@ -217,6 +219,9 @@ function ToolbarRibbon() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Switch size="small" checked={cm.enabledLinkComplex} onChange={v => setCm({ enabledLinkComplex: v })} /> <span>Show Lines</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Switch size="small" checked={cm.enabledLinkName} onChange={v => setCm({ enabledLinkName: v })} /> <span>Show Link Name</span>
+          </div>
         </div>
       </ToolbarGroup>
 
@@ -282,6 +287,8 @@ function FileListPanel() {
   const anns = useAppStore(state => state.anns)
   const annIdx = useAppStore(state => state.annIdx)
   const setAnnIdx = useAppStore(state => state.setAnnIdx)
+  const removeAnn = useAppStore(state => state.removeAnn)
+  const clearAnns = useAppStore(state => state.clearAnns)
   const sortAnnsBy = useAppStore(state => state.sortAnnsBy)
   const setSortAnnsBy = useAppStore(state => state.setSortAnnsBy)
   const fnPattern = useAppStore(state => state.fnPattern)
@@ -349,8 +356,19 @@ function FileListPanel() {
           onChange={e => setFnPattern(e.target.value)}
           allowClear
         />
-        <Button size="small" type="text" style={{ fontSize: 11 }} onClick={() => setFnPattern('')}>
-          All
+        <span style={{ color: '#888', whiteSpace: 'nowrap' }}>{displayedAnns.length} files</span>
+        <Button
+          size="small"
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          title="Remove all files"
+          onClick={() => {
+            if (anns.length === 0) return
+            clearAnns()
+            message.success('Removed all files')
+          }}
+        >
         </Button>
       </div>
 
@@ -381,10 +399,26 @@ function FileListPanel() {
                   fontSize: 12,
                   marginBottom: 2,
                   border: isSelected ? '1px solid #91d5ff' : '1px solid transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
                 onClick={() => setAnnIdx(realIdx)}
               >
-                {ann._filename || `File ${realIdx + 1}`}
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {ann._has_saved === false && <span style={{ color: '#f5222d' }}>* </span>}
+                  {ann._filename || `File ${realIdx + 1}`}
+                </span>
+                <span style={{ color: '#888', fontSize: 11, minWidth: 16, textAlign: 'right' }}>
+                  {ann.tags.length}
+                </span>
+                <MinusCircleOutlined
+                  style={{ color: '#999', fontSize: 12 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeAnn(realIdx)
+                  }}
+                />
               </div>
             )
           })

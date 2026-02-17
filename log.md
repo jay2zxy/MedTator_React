@@ -323,4 +323,42 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 
 ---
 
+### Session 4.6 — M4 Phase 6: 关系连线渲染 (2026-02-17, Opus→Sonnet)
+
+**新增组件**：
+- `RelationLines.tsx` (~270行)：SVG 连线覆盖层，绘制实体间关系折线
+
+**核心算法**：
+- `view.coordsAtPos()` 获取实体坐标 → 容器相对坐标
+- 4点折线：A顶部 → A上方(6px) → B上方 → B顶部
+- 彩色标签：`.svgmark-tag-{TAG}` 动态 CSS（关系类型颜色）
+- 响应式：监听滚动/resize/数据变化自动重算
+
+**工具栏开关**：
+- Show Links / Show Lines / Show Link Name（`Annotation.tsx`）
+
+**文件列表增强**：
+- 显示文件数 / tag 数
+- 删除单个文件（减号图标）+ 删除全部（红色垃圾桶）
+- unsaved 标记（红色 `*` 号）
+
+**样式调整**：
+- `.cm-gutters` 加 `lineHeight: '2em'` 对齐行号
+- 连线 `deltaHeight=6px`，标签 8px 字体
+
+**调试问题**：
+- 连线位置错误 → 坐标系转换修复
+- 加载时无连线 → RAF 延迟一帧
+- 标签被裁掉 → 调整 deltaHeight
+- 标签白色 → 改用关系类型颜色
+
+**验证**：
+- ✅ TypeScript 编译零错误
+- ✅ 75 测试通过
+- ✅ 浏览器测试：连线正确显示，工具栏开关正常
+
+**下一步**：Phase 7 保存 + 收尾（Save 按钮 + Ctrl+S + XML 下载）
+
+---
+
 *最后更新: 2026-02-17*
