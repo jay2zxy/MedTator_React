@@ -11,6 +11,7 @@ import { useAppStore } from '../store'
 import { spansToCmRanges } from '../editor/cm-spans'
 import { NON_CONSUMING_SPANS } from '../parsers/dtd-parser'
 import { getIdrefAttrs } from '../utils/tag-helper'
+import { remapSpansToSentenceView } from '../utils/nlp-toolkit'
 
 interface Props {
   viewRef: React.RefObject<EditorView | null>
@@ -59,9 +60,36 @@ export default function RelationLines({ viewRef }: Props) {
     const containerRect = container.getBoundingClientRect()
     const newLines: LineData[] = []
 
+    const curDisplayTagName = state.displayTagName
+
     for (const rtag of ann.tags) {
       const rtagDef = curDtd.tag_dict[rtag.tag]
       if (!rtagDef || rtagDef.type !== 'rtag') continue
+
+      // Filter by displayTagName
+      if (curDisplayTagName !== '__all__') {
+        if (rtag.tag === curDisplayTagName) {
+          // Direct match on rtag name — show it
+        } else {
+          const filterDef = curDtd.tag_dict[curDisplayTagName]
+          if (filterDef?.type === 'rtag') {
+            continue // Different rtag type — skip
+          }
+          // Filtering by etag — show rtag only if it references that etag type
+          const filterIdrefAttrs = getIdrefAttrs(rtagDef)
+          let matchesFilter = false
+          for (const attr of filterIdrefAttrs) {
+            const etagId = rtag[attr.name]
+            if (!etagId) continue
+            const etag = ann.tags.find(t => t.id === etagId)
+            if (etag && etag.tag === curDisplayTagName) {
+              matchesFilter = true
+              break
+            }
+          }
+          if (!matchesFilter) continue
+        }
+      }
 
       const idrefAttrs = getIdrefAttrs(rtagDef)
       if (idrefAttrs.length < 2) continue
@@ -90,8 +118,19 @@ export default function RelationLines({ viewRef }: Props) {
 
       if (!etagA.spans || !etagB.spans) continue
 
-      const coordsA = getEntityCoords(view, etagA.spans, containerRect)
-      const coordsB = getEntityCoords(view, etagB.spans, containerRect)
+      // In sentence mode, remap spans to sentence-view offsets
+      let spansA = etagA.spans
+      let spansB = etagB.spans
+      if (cm.displayMode === 'sentences' && ann._sentences.length > 0) {
+        const remappedA = remapSpansToSentenceView(spansA, ann._sentences)
+        const remappedB = remapSpansToSentenceView(spansB, ann._sentences)
+        if (!remappedA || !remappedB) continue
+        spansA = remappedA
+        spansB = remappedB
+      }
+
+      const coordsA = getEntityCoords(view, spansA, containerRect)
+      const coordsB = getEntityCoords(view, spansB, containerRect)
 
       if (!coordsA || !coordsB) continue
 

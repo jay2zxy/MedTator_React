@@ -26,8 +26,15 @@ interface SelectedTagInput {
   docLength: number
 }
 
+interface HintDecoInput {
+  hints: AnnTag[]
+  dtd: Dtd | null
+  docLength: number
+}
+
 export const setTagDecorations = StateEffect.define<TagDecoInput>()
 export const setSelectedTag = StateEffect.define<SelectedTagInput>()
+export const setHintDecorations = StateEffect.define<HintDecoInput>()
 
 // ── Tag ID label widget (replaces CSS ::before to avoid search-split duplication) ──
 
@@ -50,6 +57,30 @@ class TagLabelWidget extends WidgetType {
 
   eq(other: TagLabelWidget) {
     return this.tagId === other.tagId && this.tagName === other.tagName
+  }
+}
+
+// ── Hint label widget (shows id_prefix before hint text, e.g. "S" for SYMPTOM) ──
+
+class HintLabelWidget extends WidgetType {
+  idPrefix: string
+  tagName: string
+
+  constructor(idPrefix: string, tagName: string) {
+    super()
+    this.idPrefix = idPrefix
+    this.tagName = tagName
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.className = `mark-hint-label mark-tag-${this.tagName}`
+    span.textContent = this.idPrefix
+    return span
+  }
+
+  eq(other: HintLabelWidget) {
+    return this.idPrefix === other.idPrefix && this.tagName === other.tagName
   }
 }
 
@@ -185,4 +216,77 @@ function buildSelectedDecoration(input: SelectedTagInput): DecorationSet {
     .map((r) => selectedDeco.range(r.from, r.to))
 
   return Decoration.set(decoRanges, true)
+}
+
+// ── Hint decoration field ──
+
+export const hintDecorationField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none
+  },
+  update(deco, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setHintDecorations)) {
+        return buildHintDecorations(effect.value)
+      }
+    }
+    if (tr.docChanged) {
+      return Decoration.none
+    }
+    return deco
+  },
+  provide(field) {
+    return EditorView.decorations.from(field)
+  },
+})
+
+function buildHintDecorations(input: HintDecoInput): DecorationSet {
+  const { hints, dtd, docLength } = input
+  const ranges: { from: number; to: number; deco: Decoration }[] = []
+
+  for (const hint of hints) {
+    if (!hint.spans || hint.spans === '' || hint.spans === NON_CONSUMING_SPANS) continue
+
+    const cmRanges = spansToCmRanges(hint.spans)
+    let isFirstRange = true
+    for (const r of cmRanges) {
+      if (r.from < 0 || r.to <= r.from) continue
+      if (r.from >= docLength || r.to > docLength) continue
+
+      // Hint label widget — show id_prefix (e.g. "S") at the start
+      if (isFirstRange && dtd) {
+        const tagDef = dtd.tag_dict[hint.tag]
+        if (tagDef) {
+          ranges.push({
+            from: r.from,
+            to: r.from,
+            deco: Decoration.widget({
+              widget: new HintLabelWidget(tagDef.id_prefix, hint.tag),
+              side: -1,
+            }),
+          })
+        }
+        isFirstRange = false
+      }
+
+      ranges.push({
+        from: r.from,
+        to: r.to,
+        deco: Decoration.mark({
+          class: `mark-hint mark-hint-${hint.tag}`,
+          attributes: {
+            'data-hint-id': hint.id,
+            title: `Hint: ${hint.tag} — click to accept`,
+          },
+        }),
+      })
+    }
+  }
+
+  ranges.sort((a, b) => a.from - b.from || a.to - b.to)
+
+  return Decoration.set(
+    ranges.map((r) => r.deco.range(r.from, r.to)),
+    true,
+  )
 }

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { Dtd, Ann, AnnTag, DtdTag, DtdAttr } from './types'
-import { getNextTagId } from './parsers/ann-parser'
+import { getNextTagId, anns2hintDict, addTagToHintDict } from './parsers/ann-parser'
+import type { HintDict } from './parsers/ann-parser'
+import { makeEtag } from './utils/tag-helper'
 
 // ── Exported Types ──
 
@@ -85,6 +87,14 @@ interface AppState {
   updateLinkingAttr: (attrName: string, value: string) => void
   doneLinking: () => void
   cancelLinking: () => void
+
+  // ─ Hint System ─
+  hintDict: HintDict
+  hints: AnnTag[]
+  rebuildHintDict: () => void
+  setHints: (hints: AnnTag[]) => void
+  acceptHint: (hintId: string) => void
+  acceptAllHints: () => void
 
   // ─ Loading Progress ─
   isLoadingAnns: boolean
@@ -310,6 +320,75 @@ export const useAppStore = create<AppState>((set, get) => ({
       linkingTag: null,
       linkingAtts: [],
     })
+  },
+
+  // ─ Hint System ─
+  hintDict: {},
+  hints: [],
+
+  rebuildHintDict: () => {
+    const { dtd, anns } = get()
+    if (!dtd) {
+      set({ hintDict: {}, hints: [] })
+      return
+    }
+    const dict = anns2hintDict(dtd, anns)
+    set({ hintDict: dict })
+  },
+
+  setHints: (hints) => set({ hints }),
+
+  acceptHint: (hintId) => {
+    const { hints, anns, annIdx, dtd, hintDict } = get()
+    if (annIdx === null || !dtd) return
+
+    const hint = hints.find(h => h.id === hintId)
+    if (!hint) return
+
+    const ann = anns[annIdx]
+    const tagDef = dtd.tag_dict[hint.tag]
+    if (!tagDef || tagDef.type !== 'etag') return
+
+    const tag = makeEtag(
+      { spans: hint.spans!, text: hint.text! },
+      tagDef,
+      ann
+    )
+
+    ann.tags.push(tag)
+    ann._has_saved = false
+
+    // Incrementally update hint dict
+    addTagToHintDict(ann, tag, hintDict)
+
+    // Remove accepted hint
+    const newHints = hints.filter(h => h.id !== hintId)
+
+    set({ anns: [...anns], hints: newHints, hintDict: { ...hintDict } })
+  },
+
+  acceptAllHints: () => {
+    const { hints, anns, annIdx, dtd, hintDict } = get()
+    if (annIdx === null || !dtd || hints.length === 0) return
+
+    const ann = anns[annIdx]
+
+    for (const hint of hints) {
+      const tagDef = dtd.tag_dict[hint.tag]
+      if (!tagDef || tagDef.type !== 'etag') continue
+
+      const tag = makeEtag(
+        { spans: hint.spans!, text: hint.text! },
+        tagDef,
+        ann
+      )
+
+      ann.tags.push(tag)
+      addTagToHintDict(ann, tag, hintDict)
+    }
+
+    ann._has_saved = false
+    set({ anns: [...anns], hints: [], hintDict: { ...hintDict } })
   },
 
   // ─ Loading Progress ─

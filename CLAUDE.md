@@ -1104,22 +1104,111 @@ return {
 | `components/Annotation.tsx` | 修改 | 工具栏开关 + 文件列表增强 |
 | `editor/cm-theme.ts` | 修改 | gutter 行高对齐 |
 
-### 下一步
+---
 
-**Phase 7: 保存 + 收尾** — Save 按钮 + Ctrl+S + XML 下载
+## Session 4.7 — M4 Phase 7: 保存 + 快捷键 + 搜索 (2026-02-17)
+
+**提交**: fc65c8b
+
+- ✅ Save XML 按钮 + Ctrl+S 保存（ann2xml → xml2str → 下载）
+- ✅ 快捷键实体创建（1-9, a, c, v, b 映射到 etags[0..12]）
+- ✅ CM6 搜索面板（Ctrl+F）
+- ✅ 文件列表 Save 按钮 + unsaved 标记
 
 ---
 
-## M4 架构计划 — 标注编辑器（剩余 Phase）
+## Session 4.8 — M4 Phase 8/9/10: Hint + Sentence + 修复 (2026-02-18, Opus)
 
-### 7 个 Phase 进度
+### Phase 8: Hint 系统
+
+**Store 扩展** (`store.ts`):
+- 新增: `hintDict`, `hints` 状态
+- 新增 actions: `rebuildHintDict()`, `setHints()`, `acceptHint(hintId)`, `acceptAllHints()`
+- `acceptHint`: hint → `makeEtag` → `addTag` → 增量更新 hintDict
+
+**CM6 装饰层** (`editor/cm-decorations.ts`):
+- 新增 `setHintDecorations` StateEffect + `hintDecorationField` StateField
+- `HintLabelWidget`: 显示 id_prefix（如 "S"）在 hint 文本前
+- CSS `.mark-hint` 虚线下划线 + hover 变色
+
+**编辑器集成** (`AnnotationEditor.tsx`):
+- useEffect 中: `enabledHints` 时调用 `searchHintsInAnn()` → dispatch hint 装饰
+- mousedown handler: 检测 `[data-hint-id]` → `acceptHint()`
+
+**工具栏** (`Annotation.tsx`):
+- "Accept All" 按钮 → `Modal.confirm` → `acceptAllHints()`
+- 文件加载后调用 `rebuildHintDict()`
+
+### Phase 9: Sentence 分句模式
+
+**新建 `utils/nlp-toolkit.ts`** (~215行):
+- `sentTokenize(text)` — simpledot_v2 算法，按 `.?!;\n` 分句，含缩写异常词表
+- `docSpanToSentenceOffset()` / `sentenceOffsetToDocPos()` — 双向偏移映射
+- `remapSpansToSentenceView()` — 批量重映射 tag spans
+- `ensureAnnSentences(ann)` — 懒计算 `ann._sentences`
+
+**编辑器集成**:
+- `displayMode === 'sentences'` 时用 `_sentences_text` 替代 `text`
+- 装饰 dispatch 前重映射 tag/hint spans
+- 右键/快捷键创建标注时反向映射选区
+- `RelationLines.tsx` 也做了 span 重映射
+
+### Phase 10: 小修复
+
+- `RelationLines.tsx`: displayTagName 过滤连线
+- `Annotation.tsx`: 加载进度 Spin + 进度文字
+
+### 测试精简 (104 → 21)
+
+砍掉琐碎边界用例，每个模块只保留核心路径 + roundtrip：
+
+| 文件 | 旧 | 新 | 覆盖 |
+|------|----|----|------|
+| dtd-parser.test.ts | 17 | 3 | 解析 + DTD/JSON roundtrip |
+| ann-parser.test.ts | 30 | 6 | span工具 + xml roundtrip + hint + hash |
+| brat-parser.test.ts | 14 | 2 | collection + document 数据 |
+| bioc-parser.test.ts | 6 | 1 | BioC 导出 |
+| tag-helper.test.ts | 8 | 3 | makeEtag + makeRtag + getIdref |
+| nlp-toolkit.test.ts | 29 | 6 | 分句 + 缩写 + roundtrip + ensureAnn |
+
+### 文件变更
+
+| 文件 | 状态 |
+|------|------|
+| `store.ts` | 修改: +hint 状态和 actions |
+| `editor/cm-decorations.ts` | 修改: +hint 装饰层 + HintLabelWidget |
+| `editor/cm-setup.ts` | 修改: 注册 hintDecorationField |
+| `editor/cm-theme.ts` | 修改: +hint label CSS |
+| `components/AnnotationEditor.tsx` | 修改: hint + sentence 集成 |
+| `components/Annotation.tsx` | 修改: Accept All + loading + rebuildHintDict |
+| `components/RelationLines.tsx` | 修改: displayTagName 过滤 + sentence 重映射 |
+| `utils/nlp-toolkit.ts` | 新增: 分句器 + 偏移映射 |
+| `utils/__tests__/nlp-toolkit.test.ts` | 新增: 6 个测试 |
+| `test-annotation-2.xml` | 新增: hint 测试数据 |
+| `test-annotation-3.xml` | 新增: hint 测试数据 |
+| 所有 `__tests__/*.test.ts` | 精简: 104→21 |
+
+### 验证
+
+- ✅ `npm run build` 零错误
+- ✅ `npm test` 21 测试全部通过
+- ✅ 浏览器: hint 显示/点击接受/全部接受, sentence 模式标注位置正确
+
+---
+
+## M4 架构计划 — 标注编辑器
+
+### 10 个 Phase 进度（全部完成）
 
 - [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
 - [x] Phase 2: CM6 核心集成 ✅ (9984b6b)
 - [x] Phase 3: 右键菜单 + 实体创建 ✅ (984c21b)
 - [x] Phase 4: 标注表格交互增强 ✅ (cc604c8)
-- [x] Phase 5: 关系标注链接 ✅ (待提交)
-- [ ] Phase 6: 关系连线渲染
-- [ ] Phase 7: 保存 + 收尾
+- [x] Phase 5: 关系标注链接 ✅ (cee2db6)
+- [x] Phase 6: 关系连线渲染 ✅ (11c504f)
+- [x] Phase 7: 保存 + 快捷键 + 搜索 ✅ (fc65c8b)
+- [x] Phase 8: Hint 系统 ✅
+- [x] Phase 9: Sentence 分句模式 ✅
+- [x] Phase 10: 小修复（连线过滤 + 加载进度） ✅
 
 ---

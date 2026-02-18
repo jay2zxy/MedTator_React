@@ -7,7 +7,7 @@
 import { EditorState, type Extension } from '@codemirror/state'
 import { EditorView, lineNumbers, keymap } from '@codemirror/view'
 import { search, searchKeymap } from '@codemirror/search'
-import { tagDecorationField, selectedTagField } from './cm-decorations'
+import { tagDecorationField, selectedTagField, hintDecorationField } from './cm-decorations'
 import { annotationTheme } from './cm-theme'
 
 export function createEditorExtensions(): Extension[] {
@@ -20,5 +20,6 @@ export function createEditorExtensions(): Extension[] {
     annotationTheme,
     tagDecorationField,
     selectedTagField,
+    hintDecorationField,
   ]
 }

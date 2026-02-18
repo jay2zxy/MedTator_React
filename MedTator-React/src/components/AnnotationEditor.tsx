@@ -15,15 +15,17 @@ import { EditorView } from '@codemirror/view'
 import { EditOutlined } from '@ant-design/icons'
 import { useAppStore } from '../store'
 import { createEditorExtensions } from '../editor/cm-setup'
-import { setTagDecorations, setSelectedTag } from '../editor/cm-decorations'
+import { setTagDecorations, setSelectedTag, setHintDecorations } from '../editor/cm-decorations'
 import { injectTagColors } from '../editor/cm-theme'
 import { cmRangeToSpans } from '../editor/cm-spans'
+import { searchHintsInAnn } from '../parsers/ann-parser'
 import { makeEtag } from '../utils/tag-helper'
+import { ensureAnnSentences, remapSpansToSentenceView, sentenceOffsetToDocPos } from '../utils/nlp-toolkit'
+import type { AnnTag, DtdTag } from '../types'
 import ContextMenu from './ContextMenu'
 import TagPopupMenu from './TagPopupMenu'
 import LinkingBanner from './LinkingBanner'
 import RelationLines from './RelationLines'
-import type { DtdTag } from '../types'
 
 // Module-level ref so ToolbarRibbon can call openSearchPanel(editorViewRef.current)
 export const editorViewRef: { current: EditorView | null } = { current: null }
@@ -42,6 +44,10 @@ export default function AnnotationEditor() {
   const selectedTagId = useAppStore((s) => s.selectedTagId)
   const addTag = useAppStore((s) => s.addTag)
   const markMode = useAppStore((s) => s.cm.markMode)
+  const enabledHints = useAppStore((s) => s.cm.enabledHints)
+  const hintDict = useAppStore((s) => s.hintDict)
+  const setHints = useAppStore((s) => s.setHints)
+  const displayMode = useAppStore((s) => s.cm.displayMode)
 
   const currentAnn = annIdx !== null && annIdx < anns.length ? anns[annIdx] : null
 
@@ -92,7 +98,8 @@ export default function AnnotationEditor() {
         const tagIdx = APP_SHORTCUTS.indexOf(key)
         if (tagIdx < 0) return false
 
-        const { dtd, anns, annIdx } = useAppStore.getState()
+        const store = useAppStore.getState()
+        const { dtd, anns, annIdx, cm } = store
         if (!dtd || annIdx === null) return false
         if (tagIdx >= dtd.etags.length) return false
 
@@ -101,11 +108,22 @@ export default function AnnotationEditor() {
         if (sel.from === sel.to) return false
 
         const tagDef = dtd.etags[tagIdx]
-        const text = view.state.doc.sliceString(sel.from, sel.to)
-        const spans = cmRangeToSpans(sel.from, sel.to)
-        const tag = makeEtag({ spans, text }, tagDef, anns[annIdx])
+        const selText = view.state.doc.sliceString(sel.from, sel.to)
 
-        useAppStore.getState().addTag(tag)
+        // In sentence mode, remap CM6 offsets back to document space
+        let spans: string
+        if (cm.displayMode === 'sentences' && anns[annIdx]._sentences.length > 0) {
+          const docFrom = sentenceOffsetToDocPos(sel.from, anns[annIdx]._sentences)
+          const docTo = sentenceOffsetToDocPos(sel.to, anns[annIdx]._sentences)
+          if (docFrom === null || docTo === null) return false
+          spans = cmRangeToSpans(docFrom, docTo)
+        } else {
+          spans = cmRangeToSpans(sel.from, sel.to)
+        }
+
+        const tag = makeEtag({ spans, text: selText }, tagDef, anns[annIdx])
+
+        store.addTag(tag)
         view.dispatch({ selection: { anchor: sel.from } })
 
         event.preventDefault()
@@ -138,8 +156,17 @@ export default function AnnotationEditor() {
         return true
       },
       mousedown: (event: MouseEvent) => {
-        // Check if clicking on an entity tag mark
+        // Check if clicking on a hint mark
         const target = event.target as HTMLElement
+        const hintEl = target.closest('[data-hint-id]') as HTMLElement
+        if (hintEl) {
+          const hintId = hintEl.getAttribute('data-hint-id')!
+          useAppStore.getState().acceptHint(hintId)
+          event.preventDefault()
+          return true
+        }
+
+        // Check if clicking on an entity tag mark
         const tagEl = target.closest('[data-tag-id]') as HTMLElement
 
         if (tagEl) {
@@ -213,7 +240,18 @@ export default function AnnotationEditor() {
     const view = viewRef.current
     if (!view) return
 
-    const text = currentAnn?.text ?? ''
+    // Determine display text based on mode
+    let text = ''
+    const isSentenceMode = displayMode === 'sentences'
+    if (currentAnn) {
+      if (isSentenceMode) {
+        ensureAnnSentences(currentAnn)
+        text = currentAnn._sentences_text
+      } else {
+        text = currentAnn.text
+      }
+    }
+
     const currentText = view.state.doc.toString()
     const docChanged = currentText !== text
 
@@ -222,9 +260,22 @@ export default function AnnotationEditor() {
     if (dtd && currentAnn) {
       const docLen = docChanged ? text.length : view.state.doc.length
 
+      // In sentence mode, remap tag spans to sentence-view offsets
+      let displayTags = currentAnn.tags
+      if (isSentenceMode && currentAnn._sentences.length > 0) {
+        displayTags = currentAnn.tags
+          .map(tag => {
+            if (!tag.spans || tag.spans === '-1~-1') return tag
+            const remapped = remapSpansToSentenceView(tag.spans, currentAnn._sentences)
+            if (!remapped) return null
+            return { ...tag, spans: remapped }
+          })
+          .filter((t): t is AnnTag => t !== null)
+      }
+
       effects.push(
         setTagDecorations.of({
-          tags: currentAnn.tags,
+          tags: displayTags,
           dtd,
           displayTagName,
           docLength: docLen,
@@ -234,10 +285,50 @@ export default function AnnotationEditor() {
       effects.push(
         setSelectedTag.of({
           tagId: selectedTagId,
-          tags: currentAnn.tags,
+          tags: displayTags,
           docLength: docLen,
         }),
       )
+
+      // Compute and dispatch hint decorations
+      if (enabledHints) {
+        const focusTags = displayTagName !== '__all__'
+          ? [displayTagName]
+          : null
+        const computedHints = searchHintsInAnn(hintDict, currentAnn, focusTags)
+          .filter(h => h.text !== '.')
+        setHints(computedHints)
+
+        // In sentence mode, remap hint spans too
+        let displayHints = computedHints
+        if (isSentenceMode && currentAnn._sentences.length > 0) {
+          displayHints = computedHints
+            .map(hint => {
+              if (!hint.spans) return hint
+              const remapped = remapSpansToSentenceView(hint.spans, currentAnn._sentences)
+              if (!remapped) return null
+              return { ...hint, spans: remapped }
+            })
+            .filter((h): h is AnnTag => h !== null)
+        }
+
+        effects.push(
+          setHintDecorations.of({
+            hints: displayHints,
+            dtd,
+            docLength: docLen,
+          }),
+        )
+      } else {
+        setHints([])
+        effects.push(
+          setHintDecorations.of({
+            hints: [],
+            dtd,
+            docLength: docLen,
+          }),
+        )
+      }
     }
 
     if (docChanged) {
@@ -248,7 +339,7 @@ export default function AnnotationEditor() {
     } else if (effects.length > 0) {
       view.dispatch({ effects })
     }
-  }, [anns, annIdx, dtd, displayTagName, selectedTagId])
+  }, [anns, annIdx, dtd, displayTagName, selectedTagId, enabledHints, hintDict, displayMode])
 
   // ── Handle context menu tag selection (entity creation) ──
 
@@ -262,13 +353,21 @@ export default function AnnotationEditor() {
       const { from, to } = contextMenu.selection
 
       // Get selected text
-      const text = view.state.doc.sliceString(from, to)
+      const selText = view.state.doc.sliceString(from, to)
 
-      // Create spans string
-      const spans = cmRangeToSpans(from, to)
+      // In sentence mode, remap CM6 offsets back to document space
+      let spans: string
+      if (displayMode === 'sentences' && currentAnn._sentences.length > 0) {
+        const docFrom = sentenceOffsetToDocPos(from, currentAnn._sentences)
+        const docTo = sentenceOffsetToDocPos(to, currentAnn._sentences)
+        if (docFrom === null || docTo === null) return
+        spans = cmRangeToSpans(docFrom, docTo)
+      } else {
+        spans = cmRangeToSpans(from, to)
+      }
 
       // Create full entity tag with auto-generated ID and default attributes
-      const tag = makeEtag({ spans, text }, tagDef, currentAnn)
+      const tag = makeEtag({ spans, text: selText }, tagDef, currentAnn)
 
       // Add tag to current annotation
       addTag(tag)
@@ -280,7 +379,7 @@ export default function AnnotationEditor() {
 
       console.log('* Created tag:', tag)
     },
-    [contextMenu.selection, currentAnn, dtd, addTag]
+    [contextMenu.selection, currentAnn, dtd, addTag, displayMode]
   )
 
   // ── Render ──

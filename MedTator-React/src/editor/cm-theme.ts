@@ -99,6 +99,21 @@ function injectStaticStyles() {
 .mark-mode-node .mark-tag-label {
   display: inline;
 }
+
+/* Hint label (id_prefix before hint text) */
+.mark-hint-label {
+  display: none;
+  font-size: 0.75em;
+  padding: 0 2px;
+  margin-right: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* "Color + ID" mode: show hint labels */
+.mark-mode-node .mark-hint-label {
+  display: inline;
+}
 `
   document.head.appendChild(style)
 }

@@ -1,5 +1,5 @@
 import { useRef, useMemo, useEffect } from 'react'
-import { Radio, Button, Switch, Select, Input, Divider, message } from 'antd'
+import { Radio, Button, Switch, Select, Input, Divider, Modal, Spin, message } from 'antd'
 import {
   SearchOutlined,
   ClearOutlined,
@@ -66,6 +66,8 @@ function ToolbarRibbon() {
   const startLoading = useAppStore(state => state.startLoading)
   const updateLoading = useAppStore(state => state.updateLoading)
   const finishLoading = useAppStore(state => state.finishLoading)
+  const isLoadingAnns = useAppStore(state => state.isLoadingAnns)
+  const msgLoadingAnns = useAppStore(state => state.msgLoadingAnns)
   const cm = useAppStore(state => state.cm)
   const setCm = useAppStore(state => state.setCm)
 
@@ -138,6 +140,8 @@ function ToolbarRibbon() {
 
     addAnns(newAnns)
     finishLoading()
+    // Rebuild hint dictionary from all loaded annotations
+    useAppStore.getState().rebuildHintDict()
     message.success(`Loaded ${loaded} files (${errors} errors)`)
   }
 
@@ -235,7 +239,9 @@ function ToolbarRibbon() {
             if (files.length > 0) handleAnnotationFiles(files)
           }}
         >
-          {!dtd ? (
+          {isLoadingAnns ? (
+            <span style={{ color: '#1890ff' }}><Spin size="small" /> {msgLoadingAnns}</span>
+          ) : !dtd ? (
             <span style={{ color: '#999' }}>&larr; Load schema file first</span>
           ) : annIdx !== null ? (
             <>
@@ -323,7 +329,21 @@ function ToolbarRibbon() {
             <Radio.Button value="simple">Simple Hint</Radio.Button>
             <Radio.Button value="off"><StopOutlined /> No Hint</Radio.Button>
           </Radio.Group>
-          <Button size="small" icon={<CheckOutlined />}>Accept All</Button>
+          <Button size="small" icon={<CheckOutlined />} onClick={() => {
+            const { hints, acceptAllHints } = useAppStore.getState()
+            if (hints.length === 0) {
+              message.info('No hints to accept')
+              return
+            }
+            Modal.confirm({
+              title: 'Accept All Hints',
+              content: `Accept all ${hints.length} hints as annotations?`,
+              onOk: () => {
+                acceptAllHints()
+                message.success(`Accepted ${hints.length} hints`)
+              },
+            })
+          }}>Accept All</Button>
         </div>
       </ToolbarGroup>
 
