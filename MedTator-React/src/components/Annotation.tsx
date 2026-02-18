@@ -1,9 +1,11 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
 import { Radio, Button, Switch, Select, Input, Divider, message } from 'antd'
 import {
   SearchOutlined,
   ClearOutlined,
   FolderOpenOutlined,
+  SaveOutlined,
+  PlusOutlined,
   TagOutlined,
   LinkOutlined,
   LeftOutlined,
@@ -17,18 +19,49 @@ import {
   MinusCircleOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons'
+import { openSearchPanel } from '@codemirror/search'
 import { useAppStore } from '../store'
-import { readFileAsText, isSchemaFile, isAnnotationFile } from '../utils/file-helper'
+import { readFileAsText, isSchemaFile, isAnnotationFile, downloadTextAsFile } from '../utils/file-helper'
 import { parse as parseDtd } from '../parsers/dtd-parser'
-import { xml2ann, txt2ann } from '../parsers/ann-parser'
+import { xml2ann, txt2ann, ann2xml, xml2str, getNextTagId } from '../parsers/ann-parser'
 import { assignTagColors } from '../editor/cm-theme'
+import { makeEmptyEtagByDef, makeEmptyRtagByDef } from '../utils/tag-helper'
+import { editorViewRef } from './AnnotationEditor'
 import AnnotationEditor from './AnnotationEditor'
 import AnnotationTable from './AnnotationTable'
+import type { DtdTag } from '../types'
+
+// ── Shortcut keys: etags[0]='1', etags[1]='2', ... (mirrors original app_hotpot) ──
+
+const APP_SHORTCUTS = ['1','2','3','4','5','6','7','8','9','a','c','v','b']
+
+function assignTagShortcuts(dtd: ReturnType<typeof parseDtd>): void {
+  if (!dtd) return
+  dtd.etags.forEach((tag, i) => {
+    tag.shortcut = i < APP_SHORTCUTS.length ? APP_SHORTCUTS[i] : null
+  })
+}
+
+// ── Save helper (reads store directly, safe to call from event handlers) ──
+
+function saveCurrentXml(): string | null {
+  const { anns, annIdx, dtd, setAnnSaved } = useAppStore.getState()
+  if (annIdx === null || !dtd) return null
+  const ann = anns[annIdx]
+  const xmlDoc = ann2xml(ann, dtd)
+  const xmlStr = xml2str(xmlDoc)
+  const filename = ann._filename || `${dtd.name}.xml`
+  downloadTextAsFile(filename, xmlStr)
+  setAnnSaved()
+  return filename
+}
 
 /* ── 工具栏 Ribbon ── */
 function ToolbarRibbon() {
   const dtd = useAppStore(state => state.dtd)
   const setDtd = useAppStore(state => state.setDtd)
+  const anns = useAppStore(state => state.anns)
+  const annIdx = useAppStore(state => state.annIdx)
   const addAnns = useAppStore(state => state.addAnns)
   const startLoading = useAppStore(state => state.startLoading)
   const updateLoading = useAppStore(state => state.updateLoading)
@@ -58,6 +91,7 @@ function ToolbarRibbon() {
       }
 
       assignTagColors(parsed)
+      assignTagShortcuts(parsed)
       setDtd(parsed)
       message.success(`Schema loaded: ${parsed.name}`)
     } catch (error) {
@@ -148,13 +182,14 @@ function ToolbarRibbon() {
           style={{
             border: '2px dashed #d9d9d9',
             borderRadius: 4,
-            padding: '4px 12px',
+            padding: '4px 8px',
             textAlign: 'center',
             cursor: 'pointer',
             color: dtd ? '#52c41a' : '#999',
-            fontSize: 12,
-            minWidth: 120,
+            fontSize: 11,
+            minWidth: 110,
             background: dtd ? '#f6ffed' : 'transparent',
+            lineHeight: 1.5,
           }}
           onClick={() => schemaInputRef.current?.click()}
           onDragOver={e => e.preventDefault()}
@@ -164,26 +199,72 @@ function ToolbarRibbon() {
             if (file) handleSchemaFile(file)
           }}
         >
-          {dtd ? `✓ ${dtd.name}` : <>Drop a <b>Schema</b> File Here</>}
+          {dtd ? (
+            <>
+              <b>{dtd.name}</b><br />
+              {dtd.etags.length} Entity / {dtd.rtags.length} Link Tags
+            </>
+          ) : <>Drop a <b>Schema</b> File Here</>}
         </div>
       </ToolbarGroup>
 
-      {/* Annotation File */}
+      {/* Annotation File — dropzone showing current-file status */}
       <ToolbarGroup label="Annotation File (.xml)">
-        {dtd ? (
+        <div
+          style={{
+            border: '2px dashed #d9d9d9',
+            borderRadius: 4,
+            padding: '4px 8px',
+            textAlign: 'center',
+            cursor: dtd ? 'pointer' : 'default',
+            fontSize: 11,
+            minWidth: 110,
+            minHeight: 42,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: annIdx !== null ? '#f0f5ff' : 'transparent',
+            lineHeight: 1.5,
+          }}
+          onClick={() => dtd && annInputRef.current?.click()}
+          onDragOver={e => { if (dtd) e.preventDefault() }}
+          onDrop={e => {
+            e.preventDefault()
+            if (!dtd) return
+            const files = Array.from(e.dataTransfer.files)
+            if (files.length > 0) handleAnnotationFiles(files)
+          }}
+        >
+          {!dtd ? (
+            <span style={{ color: '#999' }}>&larr; Load schema file first</span>
+          ) : annIdx !== null ? (
+            <>
+              <b style={{ fontSize: 11 }}>{anns[annIdx]._filename}</b><br />
+              <span style={{ color: '#888' }}>{anns[annIdx].text.length} chars · {anns[annIdx].tags.length} tags</span>
+            </>
+          ) : anns.length === 0 ? (
+            <>Drop <b>Annotation</b><br />File(s) Here</>
+          ) : (
+            <span style={{ color: '#888' }}>Select file<br />in the list</span>
+          )}
+        </div>
+      </ToolbarGroup>
+
+      {/* Save — shown only when a file is open */}
+      {annIdx !== null && (
+        <ToolbarGroup label="Save">
           <Button
             size="small"
-            icon={<FolderOpenOutlined />}
-            onClick={() => annInputRef.current?.click()}
+            icon={<SaveOutlined />}
+            onClick={() => {
+              const fn = saveCurrentXml()
+              if (fn) message.success(`Downloaded ${fn}`)
+            }}
           >
-            Load Files
+            Save XML
           </Button>
-        ) : (
-          <div style={{ color: '#999', fontSize: 12 }}>
-            &larr; Load schema file first
-          </div>
-        )}
-      </ToolbarGroup>
+        </ToolbarGroup>
+      )}
 
       {/* Display Mode */}
       <ToolbarGroup label="Display Mode">
@@ -197,8 +278,12 @@ function ToolbarRibbon() {
       {/* Search */}
       <ToolbarGroup label="Search">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Button size="small" icon={<SearchOutlined />}>Search</Button>
-          <Button size="small" icon={<ClearOutlined />}>Clear</Button>
+          <Button size="small" icon={<SearchOutlined />} onClick={() => {
+            if (editorViewRef.current) openSearchPanel(editorViewRef.current)
+          }}>Search</Button>
+          <Button size="small" icon={<ClearOutlined />} onClick={() => {
+            if (editorViewRef.current) editorViewRef.current.focus()
+          }}>Clear</Button>
         </div>
       </ToolbarGroup>
 
@@ -458,10 +543,39 @@ function FileListPanel() {
 /* ── Tag 定义列表 ── */
 function TagListPanel() {
   const dtd = useAppStore(state => state.dtd)
+  const anns = useAppStore(state => state.anns)
+  const annIdx = useAppStore(state => state.annIdx)
   const displayTagName = useAppStore(state => state.displayTagName)
   const setDisplayTagName = useAppStore(state => state.setDisplayTagName)
+  const addTag = useAppStore(state => state.addTag)
 
   const totalTags = (dtd?.etags.length || 0) + (dtd?.rtags.length || 0)
+
+  // Count annotated tags in the current file
+  const tagCounts = useMemo(() => {
+    if (annIdx === null || !anns[annIdx]) return {} as Record<string, number>
+    const counts: Record<string, number> = {}
+    for (const tag of anns[annIdx].tags) {
+      counts[tag.tag] = (counts[tag.tag] || 0) + 1
+    }
+    return counts
+  }, [anns, annIdx])
+
+  const handleAddEmptyEtag = (tagDef: DtdTag) => {
+    const { anns: a, annIdx: i } = useAppStore.getState()
+    if (i === null) return
+    const tag = makeEmptyEtagByDef(tagDef)
+    tag.id = getNextTagId(a[i], tagDef)
+    addTag(tag)
+  }
+
+  const handleAddEmptyRtag = (tagDef: DtdTag) => {
+    const { anns: a, annIdx: i } = useAppStore.getState()
+    if (i === null) return
+    const tag = makeEmptyRtagByDef(tagDef)
+    tag.id = getNextTagId(a[i], tagDef)
+    addTag(tag)
+  }
 
   return (
     <div style={{ width: 250, minWidth: 250, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e9e9e9' }}>
@@ -498,31 +612,48 @@ function TagListPanel() {
                 <div style={{ fontSize: 11, fontWeight: 'bold', color: '#888', marginBottom: 4 }}>
                   <TagOutlined /> Entity Tags ({dtd.etags.length})
                 </div>
-                {dtd.etags.map(tag => (
+                {dtd.etags.map((tag, i) => (
                   <div
                     key={tag.name}
                     style={{
-                      padding: '2px 8px',
+                      padding: '2px 4px 2px 8px',
                       cursor: 'pointer',
                       fontSize: 12,
                       marginBottom: 2,
                       borderRadius: 4,
                       background: displayTagName === tag.name ? '#e6f7ff' : 'transparent',
                       border: displayTagName === tag.name ? '1px solid #91d5ff' : '1px solid transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                     }}
                     onClick={() => setDisplayTagName(tag.name)}
                   >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 12,
-                        height: 12,
-                        borderRadius: 2,
-                        background: tag.style?.color || '#333',
-                        marginRight: 6,
-                      }}
-                    />
-                    {tag.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                      <span style={{
+                        display: 'inline-block', width: 12, height: 12,
+                        borderRadius: 2, background: tag.style?.color || '#333', flexShrink: 0,
+                      }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag.name}</span>
+                      {tag.shortcut && (
+                        <span style={{ fontSize: 10, color: '#aaa', border: '1px solid #ddd', borderRadius: 2, padding: '0 2px', flexShrink: 0 }}>
+                          {APP_SHORTCUTS[i]}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#888', minWidth: 14, textAlign: 'right' }}>
+                        {annIdx !== null ? (tagCounts[tag.name] || 0) : ''}
+                      </span>
+                      {tag.is_non_consuming && annIdx !== null && (
+                        <Button
+                          type="text" size="small" icon={<PlusOutlined />}
+                          style={{ padding: '0 2px', height: 16, fontSize: 10 }}
+                          title="Add a document-level tag"
+                          onClick={e => { e.stopPropagation(); handleAddEmptyEtag(tag) }}
+                        />
+                      )}
+                    </div>
                   </div>
                 ))}
               </>
@@ -543,27 +674,39 @@ function TagListPanel() {
                   <div
                     key={tag.name}
                     style={{
-                      padding: '2px 8px',
+                      padding: '2px 4px 2px 8px',
                       cursor: 'pointer',
                       fontSize: 12,
                       marginBottom: 2,
                       borderRadius: 4,
                       background: displayTagName === tag.name ? '#e6f7ff' : 'transparent',
                       border: displayTagName === tag.name ? '1px solid #91d5ff' : '1px solid transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                     }}
                     onClick={() => setDisplayTagName(tag.name)}
                   >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 12,
-                        height: 12,
-                        borderRadius: 2,
-                        background: tag.style?.color || '#666',
-                        marginRight: 6,
-                      }}
-                    />
-                    {tag.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                      <span style={{
+                        display: 'inline-block', width: 12, height: 12,
+                        borderRadius: 2, background: tag.style?.color || '#666', flexShrink: 0,
+                      }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#888', minWidth: 14, textAlign: 'right' }}>
+                        {annIdx !== null ? (tagCounts[tag.name] || 0) : ''}
+                      </span>
+                      {annIdx !== null && (
+                        <Button
+                          type="text" size="small" icon={<PlusOutlined />}
+                          style={{ padding: '0 2px', height: 16, fontSize: 10 }}
+                          title="Add an empty link tag"
+                          onClick={e => { e.stopPropagation(); handleAddEmptyRtag(tag) }}
+                        />
+                      )}
+                    </div>
                   </div>
                 ))}
               </>
@@ -577,6 +720,19 @@ function TagListPanel() {
 
 /* ── 主组件 ── */
 export default function Annotation() {
+  // Ctrl+S shortcut — download current annotation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        const fn = saveCurrentXml()
+        if (fn) message.success(`Downloaded ${fn}`)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* 工具栏 */}

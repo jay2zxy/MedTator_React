@@ -6,7 +6,7 @@
  * 2. selectedTagField  — highlight overlay for the selected tag
  */
 import { StateField, StateEffect } from '@codemirror/state'
-import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
+import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import type { AnnTag, Dtd } from '../types'
 import { NON_CONSUMING_SPANS } from '../parsers/dtd-parser'
 import { spansToCmRanges } from './cm-spans'
@@ -28,6 +28,30 @@ interface SelectedTagInput {
 
 export const setTagDecorations = StateEffect.define<TagDecoInput>()
 export const setSelectedTag = StateEffect.define<SelectedTagInput>()
+
+// ── Tag ID label widget (replaces CSS ::before to avoid search-split duplication) ──
+
+class TagLabelWidget extends WidgetType {
+  tagId: string
+  tagName: string
+
+  constructor(tagId: string, tagName: string) {
+    super()
+    this.tagId = tagId
+    this.tagName = tagName
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.className = `mark-tag-label mark-tag-${this.tagName}`
+    span.textContent = this.tagId
+    return span
+  }
+
+  eq(other: TagLabelWidget) {
+    return this.tagId === other.tagId && this.tagName === other.tagName
+  }
+}
 
 // ── Tag decoration field ──
 
@@ -82,9 +106,23 @@ function buildTagDecorations(input: TagDecoInput): DecorationSet {
     if (!spans || spans === '' || spans === NON_CONSUMING_SPANS) continue
 
     const cmRanges = spansToCmRanges(spans)
+    let isFirstRange = true
     for (const r of cmRanges) {
       if (r.from < 0 || r.to <= r.from) continue
       if (r.from >= docLength || r.to > docLength) continue
+
+      // Tag ID label widget — only at the first valid range start
+      if (isFirstRange) {
+        ranges.push({
+          from: r.from,
+          to: r.from,
+          deco: Decoration.widget({
+            widget: new TagLabelWidget(tag.id, tag.tag),
+            side: -1,
+          }),
+        })
+        isFirstRange = false
+      }
 
       ranges.push({
         from: r.from,

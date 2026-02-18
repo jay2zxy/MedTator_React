@@ -158,7 +158,9 @@ export default function AnnotationTable() {
                   </td>
                   <td style={{ padding: '4px 8px', fontFamily: 'monospace' }}>{tag.id}</td>
                   <td style={{ padding: '4px 8px', fontFamily: 'monospace' }}>
-                    {tag.spans || ''}
+                    {tagDef?.type === 'rtag' ? 'LINK'
+                      : tag.spans === '-1~-1' ? 'DOCUMENT'
+                      : tag.spans || ''}
                   </td>
                   <td
                     style={{

@@ -25,6 +25,12 @@ import LinkingBanner from './LinkingBanner'
 import RelationLines from './RelationLines'
 import type { DtdTag } from '../types'
 
+// Module-level ref so ToolbarRibbon can call openSearchPanel(editorViewRef.current)
+export const editorViewRef: { current: EditorView | null } = { current: null }
+
+// Shortcut keys assigned to etags[0], etags[1], ...
+const APP_SHORTCUTS = ['1','2','3','4','5','6','7','8','9','a','c','v','b']
+
 export default function AnnotationEditor() {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -78,6 +84,34 @@ export default function AnnotationEditor() {
 
     // Event handlers as extension
     const eventHandlers = EditorView.domEventHandlers({
+      keydown: (event: KeyboardEvent, view: EditorView) => {
+        // Skip modifier-key combos (Ctrl+S etc. handled elsewhere)
+        if (event.ctrlKey || event.metaKey || event.altKey) return false
+
+        const key = event.key.toLowerCase()
+        const tagIdx = APP_SHORTCUTS.indexOf(key)
+        if (tagIdx < 0) return false
+
+        const { dtd, anns, annIdx } = useAppStore.getState()
+        if (!dtd || annIdx === null) return false
+        if (tagIdx >= dtd.etags.length) return false
+
+        // Require a text selection
+        const sel = view.state.selection.main
+        if (sel.from === sel.to) return false
+
+        const tagDef = dtd.etags[tagIdx]
+        const text = view.state.doc.sliceString(sel.from, sel.to)
+        const spans = cmRangeToSpans(sel.from, sel.to)
+        const tag = makeEtag({ spans, text }, tagDef, anns[annIdx])
+
+        useAppStore.getState().addTag(tag)
+        view.dispatch({ selection: { anchor: sel.from } })
+
+        event.preventDefault()
+        return true
+      },
+
       contextmenu: (event: MouseEvent, view: EditorView) => {
         event.preventDefault()
 
@@ -155,10 +189,12 @@ export default function AnnotationEditor() {
     })
 
     viewRef.current = view
+    editorViewRef.current = view
 
     return () => {
       view.destroy()
       viewRef.current = null
+      editorViewRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

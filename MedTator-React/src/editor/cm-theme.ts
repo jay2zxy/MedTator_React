@@ -85,14 +85,19 @@ function injectStaticStyles() {
   }
 }
 
-/* "Color + ID" mode: show tag ID label before text */
-.mark-mode-node .mark-tag::before {
-  content: attr(data-tag-id);
+/* Tag ID label widget (always in DOM, hidden in span mode) */
+.mark-tag-label {
+  display: none;
   font-size: 0.75em;
   padding: 0 2px;
   margin-right: 2px;
   background: white;
   border-radius: 4px;
+}
+
+/* "Color + ID" mode: show tag ID labels */
+.mark-mode-node .mark-tag-label {
+  display: inline;
 }
 `
   document.head.appendChild(style)
