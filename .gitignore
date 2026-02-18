@@ -149,3 +149,6 @@ vpp_data_DELI.json
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Windows special device name (created by mistake)
+nul

@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import type { Dtd, Ann, AnnTag, DtdTag, DtdAttr } from './types'
+import { getNextTagId, anns2hintDict, addTagToHintDict } from './parsers/ann-parser'
+import type { HintDict } from './parsers/ann-parser'
+import { makeEtag } from './utils/tag-helper'
 
 // ── Exported Types ──
 
@@ -81,8 +84,17 @@ interface AppState {
   linkingAtts: DtdAttr[]
   startLinking: (rtagDef: DtdTag, firstEntityId: string) => void
   setLinking: (attIndex: number, entityId: string) => void
+  updateLinkingAttr: (attrName: string, value: string) => void
   doneLinking: () => void
   cancelLinking: () => void
+
+  // ─ Hint System ─
+  hintDict: HintDict
+  hints: AnnTag[]
+  rebuildHintDict: () => void
+  setHints: (hints: AnnTag[]) => void
+  acceptHint: (hintId: string) => void
+  acceptAllHints: () => void
 
   // ─ Loading Progress ─
   isLoadingAnns: boolean
@@ -228,28 +240,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const idrefAttrs = rtagDef.attrs.filter((att) => att.vtype === 'idref')
 
-    // Create partial rtag with first entity
+    // Create partial rtag with ALL attributes set to defaults
     const partialTag: Partial<AnnTag> = {
       tag: rtagDef.name,
     }
 
-    // Set first IDREF attribute
-    if (idrefAttrs.length > 0) {
-      partialTag[idrefAttrs[0].name] = firstEntityId
+    for (const att of rtagDef.attrs) {
+      if (att.name === 'spans') continue
+      partialTag[att.name] = att.default_value
     }
 
-    // Initialize with default values for non-IDREF attributes
-    for (const att of rtagDef.attrs) {
-      if (att.vtype !== 'idref' && att.name !== 'spans') {
-        partialTag[att.name] = att.default_value
-      }
+    // Override first IDREF attribute with clicked entity
+    if (idrefAttrs.length > 0) {
+      partialTag[idrefAttrs[0].name] = firstEntityId
     }
 
     set({
       isLinking: true,
       linkingTagDef: rtagDef,
       linkingTag: partialTag,
-      linkingAtts: idrefAttrs,
+      linkingAtts: idrefAttrs.slice(1), // Remove first (already consumed)
     })
   },
 
@@ -262,7 +272,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       [linkingAtts[attIndex].name]: entityId,
     }
 
-    set({ linkingTag: updatedTag })
+    const remainingAtts = linkingAtts.filter((_, i) => i !== attIndex)
+
+    // Update tag and remaining attrs
+    set({ linkingTag: updatedTag, linkingAtts: remainingAtts })
+
+    // Auto-complete if all IDREFs filled
+    if (remainingAtts.length === 0) {
+      get().doneLinking()
+    }
+  },
+
+  updateLinkingAttr: (attrName, value) => {
+    const { linkingTag } = get()
+    if (!linkingTag) return
+    set({ linkingTag: { ...linkingTag, [attrName]: value } })
   },
 
   doneLinking: () => {
@@ -271,17 +295,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const ann = anns[annIdx]
 
-    // Generate ID
-    let n = 0
-    for (const tag of ann.tags) {
-      if (tag.tag === linkingTagDef.name) {
-        const _id = parseInt(tag.id.replace(linkingTagDef.id_prefix, ''))
-        if (_id >= n) n = _id + 1
-      }
-    }
-
     const completeTag: AnnTag = {
-      id: linkingTagDef.id_prefix + n,
+      id: getNextTagId(ann, linkingTagDef),
       tag: linkingTagDef.name,
       ...linkingTag,
     }
@@ -305,6 +320,75 @@ export const useAppStore = create<AppState>((set, get) => ({
       linkingTag: null,
       linkingAtts: [],
     })
+  },
+
+  // ─ Hint System ─
+  hintDict: {},
+  hints: [],
+
+  rebuildHintDict: () => {
+    const { dtd, anns } = get()
+    if (!dtd) {
+      set({ hintDict: {}, hints: [] })
+      return
+    }
+    const dict = anns2hintDict(dtd, anns)
+    set({ hintDict: dict })
+  },
+
+  setHints: (hints) => set({ hints }),
+
+  acceptHint: (hintId) => {
+    const { hints, anns, annIdx, dtd, hintDict } = get()
+    if (annIdx === null || !dtd) return
+
+    const hint = hints.find(h => h.id === hintId)
+    if (!hint) return
+
+    const ann = anns[annIdx]
+    const tagDef = dtd.tag_dict[hint.tag]
+    if (!tagDef || tagDef.type !== 'etag') return
+
+    const tag = makeEtag(
+      { spans: hint.spans!, text: hint.text! },
+      tagDef,
+      ann
+    )
+
+    ann.tags.push(tag)
+    ann._has_saved = false
+
+    // Incrementally update hint dict
+    addTagToHintDict(ann, tag, hintDict)
+
+    // Remove accepted hint
+    const newHints = hints.filter(h => h.id !== hintId)
+
+    set({ anns: [...anns], hints: newHints, hintDict: { ...hintDict } })
+  },
+
+  acceptAllHints: () => {
+    const { hints, anns, annIdx, dtd, hintDict } = get()
+    if (annIdx === null || !dtd || hints.length === 0) return
+
+    const ann = anns[annIdx]
+
+    for (const hint of hints) {
+      const tagDef = dtd.tag_dict[hint.tag]
+      if (!tagDef || tagDef.type !== 'etag') continue
+
+      const tag = makeEtag(
+        { spans: hint.spans!, text: hint.text! },
+        tagDef,
+        ann
+      )
+
+      ann.tags.push(tag)
+      addTagToHintDict(ann, tag, hintDict)
+    }
+
+    ann._has_saved = false
+    set({ anns: [...anns], hints: [], hintDict: { ...hintDict } })
   },
 
   // ─ Loading Progress ─

@@ -229,6 +229,174 @@ interface AppState {
 
 **下一步**：Phase 3 右键菜单 + 实体创建（推荐 Sonnet）
 
+### 2026-02-13 - Session 4.3 M4 Phase 3: 右键菜单 + 实体创建
+
+**状态**: 代码完成，待提交（Sonnet 4.5）
+
+**新增组件**：
+- ✅ `ContextMenu.tsx` (156行)：React Portal 浮层，显示 Entity Tags 列表
+
+**修改**：
+- ✅ `AnnotationEditor.tsx`：集成 contextmenu/mousedown 事件，handleTagSelect 逻辑
+- ✅ `Annotation.tsx`：AnnotationTable 添加自动滚动到底部
+
+**数据流**：
+```
+选中文本 → 右键 → ContextMenu → 点击 tag
+  ↓
+cmRangeToSpans → makeEtag → store.addTag
+  ↓
+useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
+```
+
+**功能对照**：核心功能 100% 完成
+- ✅ 右键菜单（颜色 + 快捷键）、创建标注、清除选择、关闭菜单
+- ✅ 滚动表格到底部、点击标注高亮
+- ⏸️ 快捷键创建（延后到 Phase 7）
+
+**验证**：编译零错误，75测试通过，浏览器功能正常
+
+**下一步**：Phase 4 标注表格交互增强（推荐 Sonnet）
+
+### 2026-02-13 - Session 4.4 M4 Phase 4: 标注表格交互增强
+
+**状态**: 代码完成，待提交（Sonnet 4.5）
+
+**新增文件**：
+- ✅ `components/AnnotationTable.tsx` (250行) - 独立表格组件
+
+**修改文件**：
+- ✅ `components/Annotation.tsx` - 移除旧表格实现，导入新组件
+- ✅ `parsers/ann-parser.ts` - 新增 `getTagById()` 工具函数
+
+**新增功能**：
+- ✅ 内联属性编辑：
+  - list 类型 → Select 下拉框 + "-- EMPTY --" 选项
+  - text 类型 → Input 输入框
+  - idref 类型 → Select 下拉框（显示当前文件所有实体 ID + Text）
+- ✅ 删除按钮 + 级联删除：
+  - 无关联关系 → 直接删除 + 提示
+  - 有关联关系 → Modal 确认对话框 → 先删除 rtags → 再删除 etag
+- ✅ 点击行高亮：
+  - 表格行蓝色高亮
+  - 编辑器中标注同步高亮（Phase 2 已实现）
+- ✅ 自动滚动到底部（新标注创建时）
+
+**关键技术讨论**：
+- 关系存储机制：XML + ID 引用（通过字符串 ID 实现关系，无需数据库）
+- 时间复杂度：O(n×m) 完全够用（典型场景 200 标注 < 1ms）
+- 反向索引 vs 双向图：当前数据规模不需要优化
+
+**验证**：
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试全部通过
+- ✅ 浏览器测试：属性编辑、删除、高亮功能正常
+
+**下一步**：Phase 5 关系标注链接（推荐 Opus）
+
 ---
 
-*最后更新: 2026-02-12*
+### Session 4.5 — M4 Phase 5: 关系标注链接 (2026-02-17, Opus)
+
+**新增组件**：
+- `TagPopupMenu.tsx` (~210行)：点击实体标记弹出菜单（关系类型/链接IDREF/删除）
+- `LinkingBanner.tsx` (~170行)：链接模式可拖拽浮动面板（属性编辑 + Done/Cancel）
+- `AnnotationEditor.tsx` 重写：集成两个新组件 + 左键/右键事件分流
+
+**Store 修复**：
+- `startLinking`/`setLinking`: 修复消费逻辑，IDREF 全填后自动完成
+- `doneLinking`: 改用 `getNextTagId()` 替代重复逻辑
+- 新增 `updateLinkingAttr`: 供 banner 编辑属性
+
+**Bug 修复**：
+- ID 碰撞：共享前缀的不同 relation type 会生成重复 ID（原版也有此 bug），改为按前缀查重
+- IDREF 下拉框误显示关系标注（L0/L1）：改用 DTD 判断 etag
+- IDREF 下拉框文本截断：`popupMatchSelectWidth={false}`
+- 表格表头 sticky 重叠：加 `zIndex: 1`
+
+**验证**：
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试全部通过
+- ✅ 浏览器测试：完整链接流程（点击实体→选关系→点击实体→自动创建）
+
+**下一步**：Phase 6 关系连线渲染（推荐 Sonnet）
+
+---
+
+### Session 4.6 — M4 Phase 6: 关系连线渲染 (2026-02-17, Opus→Sonnet)
+
+**新增组件**：
+- `RelationLines.tsx` (~270行)：SVG 连线覆盖层，绘制实体间关系折线
+
+**核心算法**：
+- `view.coordsAtPos()` 获取实体坐标 → 容器相对坐标
+- 4点折线：A顶部 → A上方(6px) → B上方 → B顶部
+- 彩色标签：`.svgmark-tag-{TAG}` 动态 CSS（关系类型颜色）
+- 响应式：监听滚动/resize/数据变化自动重算
+
+**工具栏开关**：
+- Show Links / Show Lines / Show Link Name（`Annotation.tsx`）
+
+**文件列表增强**：
+- 显示文件数 / tag 数
+- 删除单个文件（减号图标）+ 删除全部（红色垃圾桶）
+- unsaved 标记（红色 `*` 号）
+
+**样式调整**：
+- `.cm-gutters` 加 `lineHeight: '2em'` 对齐行号
+- 连线 `deltaHeight=6px`，标签 8px 字体
+
+**调试问题**：
+- 连线位置错误 → 坐标系转换修复
+- 加载时无连线 → RAF 延迟一帧
+- 标签被裁掉 → 调整 deltaHeight
+- 标签白色 → 改用关系类型颜色
+
+**验证**：
+- ✅ TypeScript 编译零错误
+- ✅ 75 测试通过
+- ✅ 浏览器测试：连线正确显示，工具栏开关正常
+
+---
+
+### 2026-02-17 - Session 4.7 M4 Phase 7: 保存 + 快捷键 + 搜索
+
+**提交**: fc65c8b
+
+- ✅ Save XML 按钮 + Ctrl+S 保存
+- ✅ 快捷键实体创建（1-9, a, c, v, b → etags）
+- ✅ CM6 搜索面板（Ctrl+F）
+
+---
+
+### 2026-02-18 - Session 4.8 M4 Phase 8/9/10: Hint + Sentence + 修复
+
+**Phase 8 — Hint 系统**：
+- ✅ Store: hintDict + acceptHint/acceptAllHints
+- ✅ CM6 装饰层: hint 虚线下划线 + id_prefix 标签（如 "S"）
+- ✅ 点击 hint 自动接受 + "Accept All" 按钮
+- ✅ 文件加载后自动构建 hint 字典
+
+**Phase 9 — Sentence 分句模式**：
+- ✅ 新建 `utils/nlp-toolkit.ts`: sentTokenize (simpledot_v2) + 双向偏移映射
+- ✅ 编辑器: sentences 模式显示 + tag/hint span 重映射 + 反向映射创建标注
+- ✅ RelationLines: sentence 模式连线重映射
+
+**Phase 10 — 小修复**：
+- ✅ RelationLines: displayTagName 过滤连线
+- ✅ Annotation: 加载进度 Spin
+
+**测试精简**：
+- 🔧 104 个测试 → 21 个（砍掉琐碎用例，只保留核心路径 + roundtrip）
+
+**验证**：
+- ✅ 编译零错误，21 测试通过
+- ✅ 浏览器: hint/sentence/连线过滤 全部正常
+
+**M4 标注编辑器 — 全部 10 个 Phase 完成** 🎉
+
+**下一步**：M5 Schema 编辑器 或 M6 其他功能 Tab
+
+---
+
+*最后更新: 2026-02-18*

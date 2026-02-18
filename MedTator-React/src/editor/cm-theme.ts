@@ -23,6 +23,7 @@ export const annotationTheme = EditorView.theme({
   '.cm-gutters': {
     backgroundColor: '#f5f5f5',
     borderRight: '1px solid #ddd',
+    lineHeight: '2em',
   },
   // Disable cursor blinking in readOnly mode
   '.cm-cursor': {
@@ -84,14 +85,34 @@ function injectStaticStyles() {
   }
 }
 
-/* "Color + ID" mode: show tag ID label before text */
-.mark-mode-node .mark-tag::before {
-  content: attr(data-tag-id);
+/* Tag ID label widget (always in DOM, hidden in span mode) */
+.mark-tag-label {
+  display: none;
   font-size: 0.75em;
   padding: 0 2px;
   margin-right: 2px;
   background: white;
   border-radius: 4px;
+}
+
+/* "Color + ID" mode: show tag ID labels */
+.mark-mode-node .mark-tag-label {
+  display: inline;
+}
+
+/* Hint label (id_prefix before hint text) */
+.mark-hint-label {
+  display: none;
+  font-size: 0.75em;
+  padding: 0 2px;
+  margin-right: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* "Color + ID" mode: show hint labels */
+.mark-mode-node .mark-hint-label {
+  display: inline;
 }
 `
   document.head.appendChild(style)

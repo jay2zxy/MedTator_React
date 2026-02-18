@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<MEDICAL_SYMPTOMS>
+<TEXT><![CDATA[The patient has a history of chronic migraine and reports frequent headache episodes. She was prescribed aspirin 325mg daily. Dizziness and nausea were also noted during examination.]]></TEXT>
+<TAGS>
+<DISEASE spans="29~45" text="chronic migraine" id="D0" status="history" comment="NA"/>
+<SYMPTOM spans="67~75" text="headache" id="S0" certainty="positive" severity="moderate" comment="NA"/>
+<MEDICATION spans="105~112" text="aspirin" id="M0" dosage="325mg" frequency="daily" comment="NA"/>
+</TAGS>
+<META/>
+</MEDICAL_SYMPTOMS>

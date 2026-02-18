@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<MEDICAL_SYMPTOMS>
+<TEXT><![CDATA[Patient presents with severe headache, dizziness and blurred vision. Currently taking aspirin and ibuprofen for chronic migraine management. Blood pressure is normal at 120/80.]]></TEXT>
+<TAGS>
+<SYMPTOM spans="29~37" text="headache" id="S0" certainty="positive" severity="severe" comment="NA"/>
+<DISEASE spans="112~128" text="chronic migraine" id="D0" status="current" comment="NA"/>
+</TAGS>
+<META/>
+</MEDICAL_SYMPTOMS>

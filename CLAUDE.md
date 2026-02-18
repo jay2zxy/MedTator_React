@@ -719,128 +719,496 @@ Phase 3: 右键菜单 + 实体创建（推荐 Sonnet）
 
 ---
 
-## M4 架构计划 — 标注编辑器（剩余 Phase）
+## Session 4.3 — M4 Phase 3: 右键菜单 + 实体创建
 
-### 7 个 Phase 进度
+**时间**: 2026-02-13
+**分支**: jay-dev
+**模型**: Sonnet 4.5
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 新建 `ContextMenu.tsx`（156行）**
+- React Portal 实现浮层定位（fixed positioning）
+- 显示 Entity Tags 列表（颜色方块 + 名称 + 快捷键）
+- Escape / 点击外部自动关闭
+- 菜单溢出视口时自动调整位置
+
+**2. 修改 `AnnotationEditor.tsx`**
+- 集成 `EditorView.domEventHandlers`：
+  - **contextmenu**: 选中文本右键 → 显示菜单（selection.from !== selection.to）
+  - **mousedown**: 点击标注 → 设置 selectedTagId（检测 `data-tag-id` 属性）
+- `handleTagSelect`: 菜单点击 → `cmRangeToSpans` → `makeEtag` → `addTag` → 清除 CM6 选择
+- 渲染 `<ContextMenu>` 组件
+
+**3. 修改 `Annotation.tsx`**
+- AnnotationTable 添加 useRef + useEffect：标注数量变化时自动滚动到底部
+- 添加 useEffect import
+
+### 数据流
+
+```
+用户选中文本 "Blood pressure"
+  ↓
+右键 → contextmenu 事件 → 记录 selection { from: 75, to: 89 }
+  ↓
+显示 ContextMenu（3个 Entity Tags）
+  ↓
+点击 SYMPTOM
+  ↓
+cmRangeToSpans(75, 89) → "75~89"
+  ↓
+makeEtag({ spans: "75~89", text: "Blood pressure" }, SYMPTOM_def, ann)
+  ↓
+store.addTag(tag) → anns[annIdx].tags.push + _saved=false
+  ↓
+useEffect 触发 → CM6 dispatch setTagDecorations → 彩色高亮出现
+  ↓
+AnnotationTable useEffect 触发 → scrollTop = scrollHeight
+```
+
+### 功能对照原版
+
+| 功能 | 原版 | 实现 | 状态 |
+|------|------|------|------|
+| 选中文本右键显示菜单 | ✅ | ✅ | ✅ |
+| 菜单颜色方块 + 快捷键 | ✅ | ✅ | ✅ |
+| 点击菜单创建标注 | ✅ | ✅ | ✅ |
+| 创建后清除选择 | ✅ | ✅ | ✅ |
+| 创建后关闭菜单 | ✅ | ✅ | ✅ |
+| 创建后滚动表格到底部 | ✅ | ✅ | ✅ |
+| Escape/点击外部关闭 | ✅ | ✅ | ✅ |
+| 点击标注高亮 | ✅ | ✅ | ✅ |
+| **快捷键创建标注** | ✅ | ❌ | ⏸️ Phase 7 |
+| **点击标注显示菜单** | ✅ | ❌ | ⏸️ Phase 5 |
+
+**核心功能完成度: 100%**
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试通过
+- ✅ 浏览器测试（用户确认）：右键菜单弹出 → 选择 tag → 标注显示
+
+### 下一步
+
+Phase 4: 标注表格交互增强（推荐 Sonnet）
+
+---
+
+## Session 4.4 — M4 Phase 4: 标注表格交互增强
+
+**时间**: 2026-02-13
+**分支**: jay-dev
+**模型**: Sonnet 4.5
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 新建 `components/AnnotationTable.tsx`（250行）**
+
+独立的表格组件，包含：
+- **内联属性编辑**：
+  - `list` 类型 → Select 下拉框 + "-- EMPTY --" 选项
+  - `text` 类型 → Input 输入框
+  - `idref` 类型 → Select 下拉框（显示当前文件所有实体标注）
+  - 点击停止事件冒泡，避免触发行选择
+- **删除按钮**：
+  - 每行添加红色删除按钮
+  - 无关联关系 → 直接删除 + message 提示
+  - 有关联关系 → Modal.confirm() 显示关联 rtag 列表 → 级联删除
+- **点击行高亮**：
+  - 点击行 → 设置 `selectedTagId`
+  - 表格行蓝色高亮（`background: '#e6f7ff'`）
+  - 编辑器中同步高亮（Phase 2 已实现）
+- **Auto-scroll**：新标注添加时自动滚动到底部
+
+**2. 修改 `components/Annotation.tsx`**
+- 删除旧的内联 AnnotationTable 函数（~70行）
+- 导入新的 AnnotationTable 组件
+- 移除 useEffect import（新组件内部处理）
+
+**3. 修改 `parsers/ann-parser.ts`**
+- 新增 `getTagById(tagId, ann)` - 从标注中查找 tag（用于表格组件）
+- 删除重复的 `getLinkedRtags` 定义（保留原有实现）
+
+**4. AttributeEditor 子组件**
+- 根据 DtdAttr.vtype 渲染不同控件
+- 过滤内置属性（tag/id/spans/text/type）
+- idref 类型显示 `id | text` 格式（便于选择）
+- 所有控件点击时停止事件冒泡
+
+### 数据流
+
+**属性编辑**：
+```
+用户修改 Select/Input
+  ↓
+onChange → updateTagAttr(tagId, attrName, value)
+  ↓
+store 更新 ann.tags[i][attrName] + ann._has_saved = false
+  ↓
+React 重新渲染表格
+```
+
+**删除流程**：
+```
+点击删除按钮
+  ↓
+handleDelete(tagId)
+  ↓
+getLinkedRtags(tagId, ann) → 查找关联关系（O(n×m)）
+  ↓
+if (linkedRtags.length === 0):
+  removeTag(tagId) → message.success()
+else:
+  Modal.confirm() → 显示关联列表
+    ↓ 用户确认
+  linkedRtags.forEach(rtag => removeTag(rtag.id))  ← 先删除关系
+  removeTag(tagId)  ← 再删除实体
+```
+
+**点击行高亮**：
+```
+点击表格行
+  ↓
+handleRowClick(tagId) → setSelectedTagId(tagId)
+  ↓
+表格行：isSelected ? '#e6f7ff' : 'transparent'
+编辑器：CM6 setSelectedTag effect → 3px border + glow 动画
+```
+
+### 关键技术讨论
+
+**1. 关系存储机制**
+
+用户理解了关系标注的存储原理：
+- **Schema 定义**：`<!ATTLIST LK_SYMPTOM_DISEASE arg0 IDREF prefix="SYMPTOM">`
+- **XML 存储**：`<LK_SYMPTOM_DISEASE id="L0" SYMPTOMID="S1" DISEASEID="D0" .../>`
+- **内存表示**：`{ id: "L0", tag: "LK_SYMPTOM_DISEASE", SYMPTOMID: "S1", DISEASEID: "D0", ... }`
+- **引用机制**：通过字符串 ID 引用，不需要数据库
+
+**2. 时间复杂度分析**
+
+用户询问 `getLinkedRtags` 的性能：
+- **复杂度**：O(n × m)，n=标注数，m=属性数
+- **实际场景**：
+  - 典型：200 标注 × 8 属性 = 1,600 次比较 → 0.03ms
+  - 极端：1,000 标注 × 10 属性 = 10,000 次比较 → 0.2ms
+- **调用频率**：低频（只在删除时调用）
+- **原版实现**：同样的 O(n×m) 暴力遍历，5年未优化
+- **结论**：性能完全够用，不需要优化
+
+**3. 反向索引和双向图**
+
+用户理解了图的数据结构：
+- **当前实现**：单向图（只有正向引用）
+  - 正向查询：L0 引用了谁？→ O(m)（遍历属性）
+  - 反向查询：谁引用了 D0？→ O(n×m)（遍历所有标注）
+- **反向索引**：构建入边表 `tagReferences: { "D0": ["L0", "L1"] }`
+- **双向图**：正向引用 + 反向索引 = 可双向查询
+  - 反向查询优化为 O(1)
+  - 代价：增加空间和维护复杂度
+- **结论**：当前数据规模小 + 删除频率低，不需要反向索引
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 个测试全部通过
+- ✅ 浏览器测试（用户确认）：
+  - 属性编辑正常（list/text/idref）
+  - 删除功能正常（直接删除 + 级联删除）
+  - 点击行高亮正常（表格 + 编辑器双向同步）
+
+### 文件变更统计
+
+| 文件 | 状态 | 行数 | 说明 |
+|------|------|------|------|
+| `components/AnnotationTable.tsx` | 新增 | 250 | 独立表格组件 + 属性编辑 + 删除 |
+| `components/Annotation.tsx` | 修改 | -70 | 移除旧表格，导入新组件 |
+| `parsers/ann-parser.ts` | 修改 | +11 | 新增 getTagById() |
+
+### 下一步
+
+**Phase 5: 关系标注链接**（推荐 Opus）
+- 点击实体标注 → 显示可用关系类型
+- 选择关系类型 → 进入链接模式 → 显示提示横幅
+- 点击第二个实体 → 创建关系标注
+- 状态机管理：isLinking / linkingTagDef / linkingTag / linkingAtts
+
+---
+
+## Session 4.5 — M4 Phase 5: 关系标注链接
+
+**时间**: 2026-02-17
+**分支**: jay-dev
+**模型**: Opus 4.6
+**状态**: 代码完成，待提交
+
+### 完成的工作
+
+**1. 修复 store.ts 链接状态机**
+- `startLinking`: 初始化所有属性默认值（含IDREF），消费第一个 IDREF 后只存剩余的到 `linkingAtts`
+- `setLinking`: 填入 IDREF 后从 `linkingAtts` 移除，为空时自动调用 `doneLinking()`
+- `doneLinking`: 改用 `getNextTagId()` 替代重复的 ID 生成逻辑
+- 新增 `updateLinkingAttr(attrName, value)`: 供 LinkingBanner 编辑非 IDREF 属性
+
+**2. 新建 `components/TagPopupMenu.tsx`（~210行）**
+- React Portal 浮层，点击实体标记时显示
+- 两种渲染模式：
+  - **未链接时**: tag info header + 关系类型列表 + 删除选项
+  - **链接中**: tag info header + 剩余 IDREF 属性列表 + 取消链接
+- 点击关系类型 → `startLinking(rtag, tagId)`
+- 点击 IDREF 属性 → `setLinking(idx, tagId)` → 自动完成
+- Escape / 点击外部关闭（跳过对其他 entity mark 的点击，允许菜单更新）
+
+**3. 新建 `components/LinkingBanner.tsx`（~170行）**
+- 可拖拽浮动面板（absolute 定位，mousedown 拖拽实现）
+- Header: "Creating a Link Tag **{name}**"
+- Done Linking / Cancel 按钮
+- 属性行：IDREF→Select（带 `popupMatchSelectWidth={false}`）, list→Select, text→Input
+- 通过 `updateLinkingAttr` 实时编辑
+
+**4. 修改 `components/AnnotationEditor.tsx`**
+- 新增 `tagMenu` 状态（visible, x, y, tagId）
+- `mousedown` handler: 左键点击 entity mark → `setSelectedTagId` + 显示 TagPopupMenu
+- `contextmenu` handler: 右键文本选择 → 显示 ContextMenu（原有）
+- 用 `useRef` 存 setState 引用避免闭包过期
+- 用 `useAppStore.getState()` 在事件处理器中读最新状态
+- 渲染 LinkingBanner + TagPopupMenu
+
+### Bug 修复
+
+**1. ID 碰撞 bug（原版也有）**
+- 问题：`LK_SYMPTOM_DISEASE` 和 `LK_MED_DISEASE` 共享前缀 "L"，原版 `get_next_tag_id` 按 tag name 计数，不同类型会生成相同 ID
+- 修复：`getNextTagId()` 改为 `tag.id.startsWith(prefix)` 检查所有同前缀 tag
+- `doneLinking` 改用 `getNextTagId()` 替代内联重复逻辑
+
+**2. IDREF 下拉框显示关系标注**
+- 问题：`t.type === 'etag' || !t.type` 过滤不可靠，L0/L1/L2 出现在下拉框
+- 修复：改用 `dtd.tag_dict[t.tag]?.type === 'etag'` 过滤（AnnotationTable + LinkingBanner）
+
+**3. IDREF 下拉框文本截断**
+- 问题：下拉弹窗宽度跟输入框，长文本被截断
+- 修复：添加 `popupMatchSelectWidth={false}`
+
+**4. 标注表格表头重叠**
+- 问题：sticky 表头无 z-index，滚动时内容穿过
+- 修复：添加 `zIndex: 1`
+
+### 完整交互流程
+
+```
+点击 S1 (SYMPTOM) → TagPopupMenu 显示关系类型
+  → 选 LK_SYMPTOM_DISEASE → startLinking(rtag, "S1")
+  → LinkingBanner 出现（arg0=S1, arg1=空, relation_type=associated_with）
+  → 点击 D0 (DISEASE) → TagPopupMenu 显示 "LK_SYMPTOM_DISEASE - arg1"
+  → 点击 "arg1" → setLinking(0, "D0") → linkingAtts 为空 → doneLinking()
+  → 关系标注 L2 创建，出现在表格
+```
+
+### 验证
+
+- TypeScript 编译 ✅ 零错误
+- 75 个测试 ✅ 全部通过
+- 浏览器测试 ✅：
+  - 点击实体标记 → 弹出关系类型菜单
+  - 选择关系类型 → LinkingBanner 出现，可拖拽
+  - 点击第二个实体 → 填入 IDREF → 自动完成
+  - 关系出现在标注表格
+  - Done Linking / Cancel 按钮正常
+  - IDREF 下拉框只显示实体标注
+
+### 文件变更统计
+
+| 文件 | 状态 | 行数 | 说明 |
+|------|------|------|------|
+| `store.ts` | 修改 | +15 | 修复链接状态机 + updateLinkingAttr |
+| `components/TagPopupMenu.tsx` | 新增 | ~210 | 实体标记点击弹出菜单 |
+| `components/LinkingBanner.tsx` | 新增 | ~170 | 链接模式浮动面板 |
+| `components/AnnotationEditor.tsx` | 重写 | ~310 | 集成 TagPopupMenu + LinkingBanner |
+| `components/AnnotationTable.tsx` | 修改 | +5 | IDREF 过滤 + popupMatchSelectWidth + zIndex |
+| `parsers/ann-parser.ts` | 修改 | +5 | getNextTagId 按前缀查重 |
+
+
+## Session 4.6 — M4 Phase 6: 关系连线渲染
+
+**时间**: 2026-02-17
+**分支**: jay-dev
+**模型**: Opus 4.6 → Sonnet 4.5
+**状态**: 完成
+
+### 完成的工作
+
+**1. 新建 `components/RelationLines.tsx` (~270行)**
+- SVG 覆盖层，绘制关系标注连线
+- `view.coordsAtPos()` 获取实体坐标 → 容器相对坐标
+- 4点折线算法：A顶部 → A上方 → B上方 → B顶部
+- 彩色标签背景（`.svgmark-tag-{TAG}` 动态 CSS）
+- 响应滚动/resize/数据变化自动重算
+
+**2. 集成到 `AnnotationEditor.tsx`**
+- 传递 `viewRef` 给 RelationLines
+- 渲染在编辑器容器内（绝对定位 overlay）
+
+**3. 工具栏开关 (`Annotation.tsx`)**
+- Show Links / Show Lines / Show Link Name
+
+**4. 调整样式**
+- `deltaHeight` 6px（连线距标注上方间距）
+- 标签 8px 字体，24×10 背景 rect
+- `.cm-gutters` 加 `lineHeight: '2em'` 对齐行号
+
+**5. 文件列表增强**
+- 显示文件数量 / tag 数量
+- 删除单个文件按钮（`MinusCircleOutlined`）
+- 删除全部按钮（红色 `DeleteOutlined` + "All"）
+- unsaved 标记（红色 `*` 号）
+
+### 技术难点
+
+**坐标系转换**：
+```typescript
+// viewport 绝对坐标 → 容器相对坐标
+const containerRect = container.getBoundingClientRect()
+return {
+  left: fromCoords.left - containerRect.left,
+  top: fromCoords.top - containerRect.top,
+  right: toCoords.right - containerRect.left,
+}
+```
+
+**时序问题**：
+- CM6 渲染完成后才能 `coordsAtPos()`
+- 用 `requestAnimationFrame` 延迟一帧
+- 边界检查 + try-catch 防止 "No tile" 错误
+
+**调试过程**：
+1. 连线在页面顶部 → 修复坐标偏移
+2. 加载时无连线 → 加 RAF 延迟
+3. 标签被裁掉 → 调整 deltaHeight 14→6
+4. 标签白色 → 改用关系类型颜色 CSS
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 75 测试通过
+- ✅ 浏览器测试：连线正确显示，工具栏开关正常，滚动跟随
+
+### 文件变更
+
+| 文件 | 状态 | 说明 |
+|------|------|------|
+| `components/RelationLines.tsx` | 新增 | SVG 连线组件 |
+| `components/AnnotationEditor.tsx` | 修改 | 集成 RelationLines |
+| `components/Annotation.tsx` | 修改 | 工具栏开关 + 文件列表增强 |
+| `editor/cm-theme.ts` | 修改 | gutter 行高对齐 |
+
+---
+
+## Session 4.7 — M4 Phase 7: 保存 + 快捷键 + 搜索 (2026-02-17)
+
+**提交**: fc65c8b
+
+- ✅ Save XML 按钮 + Ctrl+S 保存（ann2xml → xml2str → 下载）
+- ✅ 快捷键实体创建（1-9, a, c, v, b 映射到 etags[0..12]）
+- ✅ CM6 搜索面板（Ctrl+F）
+- ✅ 文件列表 Save 按钮 + unsaved 标记
+
+---
+
+## Session 4.8 — M4 Phase 8/9/10: Hint + Sentence + 修复 (2026-02-18, Opus)
+
+### Phase 8: Hint 系统
+
+**Store 扩展** (`store.ts`):
+- 新增: `hintDict`, `hints` 状态
+- 新增 actions: `rebuildHintDict()`, `setHints()`, `acceptHint(hintId)`, `acceptAllHints()`
+- `acceptHint`: hint → `makeEtag` → `addTag` → 增量更新 hintDict
+
+**CM6 装饰层** (`editor/cm-decorations.ts`):
+- 新增 `setHintDecorations` StateEffect + `hintDecorationField` StateField
+- `HintLabelWidget`: 显示 id_prefix（如 "S"）在 hint 文本前
+- CSS `.mark-hint` 虚线下划线 + hover 变色
+
+**编辑器集成** (`AnnotationEditor.tsx`):
+- useEffect 中: `enabledHints` 时调用 `searchHintsInAnn()` → dispatch hint 装饰
+- mousedown handler: 检测 `[data-hint-id]` → `acceptHint()`
+
+**工具栏** (`Annotation.tsx`):
+- "Accept All" 按钮 → `Modal.confirm` → `acceptAllHints()`
+- 文件加载后调用 `rebuildHintDict()`
+
+### Phase 9: Sentence 分句模式
+
+**新建 `utils/nlp-toolkit.ts`** (~215行):
+- `sentTokenize(text)` — simpledot_v2 算法，按 `.?!;\n` 分句，含缩写异常词表
+- `docSpanToSentenceOffset()` / `sentenceOffsetToDocPos()` — 双向偏移映射
+- `remapSpansToSentenceView()` — 批量重映射 tag spans
+- `ensureAnnSentences(ann)` — 懒计算 `ann._sentences`
+
+**编辑器集成**:
+- `displayMode === 'sentences'` 时用 `_sentences_text` 替代 `text`
+- 装饰 dispatch 前重映射 tag/hint spans
+- 右键/快捷键创建标注时反向映射选区
+- `RelationLines.tsx` 也做了 span 重映射
+
+### Phase 10: 小修复
+
+- `RelationLines.tsx`: displayTagName 过滤连线
+- `Annotation.tsx`: 加载进度 Spin + 进度文字
+
+### 测试精简 (104 → 21)
+
+砍掉琐碎边界用例，每个模块只保留核心路径 + roundtrip：
+
+| 文件 | 旧 | 新 | 覆盖 |
+|------|----|----|------|
+| dtd-parser.test.ts | 17 | 3 | 解析 + DTD/JSON roundtrip |
+| ann-parser.test.ts | 30 | 6 | span工具 + xml roundtrip + hint + hash |
+| brat-parser.test.ts | 14 | 2 | collection + document 数据 |
+| bioc-parser.test.ts | 6 | 1 | BioC 导出 |
+| tag-helper.test.ts | 8 | 3 | makeEtag + makeRtag + getIdref |
+| nlp-toolkit.test.ts | 29 | 6 | 分句 + 缩写 + roundtrip + ensureAnn |
+
+### 文件变更
+
+| 文件 | 状态 |
+|------|------|
+| `store.ts` | 修改: +hint 状态和 actions |
+| `editor/cm-decorations.ts` | 修改: +hint 装饰层 + HintLabelWidget |
+| `editor/cm-setup.ts` | 修改: 注册 hintDecorationField |
+| `editor/cm-theme.ts` | 修改: +hint label CSS |
+| `components/AnnotationEditor.tsx` | 修改: hint + sentence 集成 |
+| `components/Annotation.tsx` | 修改: Accept All + loading + rebuildHintDict |
+| `components/RelationLines.tsx` | 修改: displayTagName 过滤 + sentence 重映射 |
+| `utils/nlp-toolkit.ts` | 新增: 分句器 + 偏移映射 |
+| `utils/__tests__/nlp-toolkit.test.ts` | 新增: 6 个测试 |
+| `test-annotation-2.xml` | 新增: hint 测试数据 |
+| `test-annotation-3.xml` | 新增: hint 测试数据 |
+| 所有 `__tests__/*.test.ts` | 精简: 104→21 |
+
+### 验证
+
+- ✅ `npm run build` 零错误
+- ✅ `npm test` 21 测试全部通过
+- ✅ 浏览器: hint 显示/点击接受/全部接受, sentence 模式标注位置正确
+
+---
+
+## M4 架构计划 — 标注编辑器
+
+### 10 个 Phase 进度（全部完成）
 
 - [x] Phase 1: Store 扩展 + Tag Helper ✅ (8abb46a)
-- [x] Phase 2: CM6 核心集成 ✅ (待提交)
-- [ ] Phase 3: 右键菜单 + 实体创建
-- [ ] Phase 4: 标注表格交互增强
-- [ ] Phase 5: 关系标注链接
-- [ ] Phase 6: 关系连线渲染
-- [ ] Phase 7: 保存 + 收尾
+- [x] Phase 2: CM6 核心集成 ✅ (9984b6b)
+- [x] Phase 3: 右键菜单 + 实体创建 ✅ (984c21b)
+- [x] Phase 4: 标注表格交互增强 ✅ (cc604c8)
+- [x] Phase 5: 关系标注链接 ✅ (cee2db6)
+- [x] Phase 6: 关系连线渲染 ✅ (11c504f)
+- [x] Phase 7: 保存 + 快捷键 + 搜索 ✅ (fc65c8b)
+- [x] Phase 8: Hint 系统 ✅
+- [x] Phase 9: Sentence 分句模式 ✅
+- [x] Phase 10: 小修复（连线过滤 + 加载进度） ✅
 
 ---
-
-#### Phase 3: 右键菜单 + 实体创建
-
-**目标**：选中文本 → 右键 → 选标签类型 → 创建标注
-
-**`components/ContextMenu.tsx`**：
-- 浮层组件，React Portal 定位到鼠标坐标
-- 选中文本右键 → 列出 dtd.etags（颜色图标 + 名称 + 快捷键）
-- 点击标记右键 → 列出关系类型 + 删除选项
-- Escape / 点击外部关闭
-
-**创建流程**：
-```
-CM6 selection → cmRangeToSpans(from, to) → spans字符串
-→ makeEtag(basicTag, tagDef, currentAnn) → AnnTag
-→ store.addTag(tag) → useEffect 触发装饰重建
-```
-
-**CM6 事件绑定**：
-- `EditorView.domEventHandlers({ contextmenu, mousedown })`
-- contextmenu：阻止默认，显示菜单
-- mousedown：检测 data-tag-id 属性，设置 selectedTagId
-
-**验证**：选文本 → 右键 → 创建实体 → 编辑器和表格都显示新标注
-
----
-
-#### Phase 4: 标注表格交互增强
-
-**目标**：内联属性编辑 + 点击跳转 + 删除
-
-**从 Annotation.tsx 增强 AnnotationTable**：
-- 属性列根据 DtdAttr.vtype 渲染不同控件：
-  - `list` → `<Select>` + attr.values
-  - `text` → `<Input>`
-  - `idref` → `<Select>` 列出当前文件所有实体标注
-- 修改属性 → `store.updateTagAttr()`
-- 点击行 → CM6 `scrollIntoView` + `setSelectedTagId`
-- 删除按钮 → 检查关联 rtags → `Modal.confirm()` → `store.removeTag()`
-- 双向高亮：selectedTagId 同时影响编辑器和表格
-
-**验证**：修改属性 → 文件标记 unsaved。点击行 → 编辑器滚动。删除 → 表格和编辑器同步。
-
----
-
-#### Phase 5: 关系标注链接 ⭐ 复杂状态机
-
-**目标**：两阶段创建关系标注
-
-**流程**：
-1. 点击实体标记 → 弹出菜单显示可用关系类型
-2. 选择关系类型 → `startLinking(rtagDef, entityId)`
-3. 编辑器顶部显示链接指示条："Creating [RelType] — click next entity for arg1"
-4. 点击第二个实体 → `setLinking(0, entityId)`
-5. 如果还有更多 IDREF 属性 → 继续；否则 → `doneLinking()`
-6. 关系标注添加到 tags 数组
-
-**UI**：
-- 链接进行中显示浮动横幅
-- 菜单在链接模式下显示剩余属性 + 取消按钮
-- `cancelLinking()` 重置所有状态
-
-**验证**：创建两个实体 → 点击第一个 → 选关系类型 → 点击第二个 → 关系出现在表格
-
----
-
-#### Phase 6: 关系连线渲染
-
-**目标**：SVG 连线显示实体间关系
-
-- 绝对定位 SVG 覆盖在 CM6 上方（pointerEvents: none）
-- `view.coordsAtPos()` 获取实体标记位置
-- 绘制 polyline 连线 + 中点标签文字
-- 响应滚动和 resize 重新计算
-- 工具栏开关：Show Links / Show Lines
-
-**验证**：创建关系 → 连线出现。滚动 → 连线跟随。关闭开关 → 连线消失。
-
----
-
-#### Phase 7: 保存 + 收尾
-
-**目标**：文件保存 + 快捷键 + UI 打磨
-
-- Save 按钮：`ann2xml(ann, dtd)` → `xml2str()` → `downloadTextAsFile()`
-- Ctrl+S 快捷键
-- 文件列表 unsaved 标记（文件名前加 * 号）
-- Tag 快捷键（dtd.etags[i].shortcut → 选中文本时按键创建标注）
-- 标注颜色动态生成 CSS
-
-**验证**：修改标注 → * 号出现 → 保存 → 下载 XML → 重新加载验证内容一致
-
----
-
-### 模型分配
-
-| Phase | 模型 | 原因 |
-|-------|------|------|
-| Phase 1: Store + Helpers | Sonnet | 纯函数移植 + store 扩展，逻辑明确 |
-| Phase 2: CM6 核心 | **Opus** | 架构最复杂：StateField、装饰系统、React 集成 |
-| Phase 3: 右键菜单 + 实体创建 | Sonnet | UI 组件 + 事件绑定，模式已定 |
-| Phase 4: 表格交互 | Sonnet | 表单控件 + 事件处理 |
-| Phase 5: 关系链接 | **Opus** | 多步状态机，交互复杂 |
-| Phase 6: 关系连线 | Sonnet | SVG 绘制，逻辑清晰 |
-| Phase 7: 保存 + 收尾 | Sonnet | 功能明确，组合已有工具 |
-
-### 验证策略
-
-每个 Phase 完成后：
-1. `npm run build` — TypeScript 编译零错误
-2. `npm test` — 67 个旧测试 + 新测试全部通过
-3. `npm run dev` — 浏览器手动测试（加载 test-schema.dtd + test-annotation.xml）

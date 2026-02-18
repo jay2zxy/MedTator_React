@@ -143,36 +143,43 @@ MedTator/  (Git 仓库根目录)
 MedTator-React/src/
 ├── App.tsx                  # 主组件，Tab切换
 ├── main.tsx                 # 入口
-├── store.ts                 # Zustand，一个文件搞定全局状态
-├── types.ts                 # 类型定义，一个文件够用
+├── store.ts                 # Zustand 全局状态
+├── types.ts                 # 类型定义
 │
 ├── components/              # 所有组件扁平放
-│   ├── RibbonMenu.tsx       # 顶部菜单（对应Metro UI Ribbon）
-│   ├── FileList.tsx         # 文件列表
-│   ├── Editor.tsx           # CodeMirror封装
-│   ├── BratViewer.tsx       # BRAT可视化封装
-│   ├── SchemaEditor.tsx     # Schema编辑器
-│   ├── Statistics.tsx       # 统计面板
-│   ├── Export.tsx           # 导出
-│   ├── Adjudication.tsx     # IAA裁决
-│   ├── Converter.tsx        # 格式转换
-│   ├── ErrorAnalysis.tsx    # 错误分析
-│   └── Toolkit.tsx          # 工具集
+│   ├── RibbonMenu.tsx       # 顶部Tab菜单
+│   ├── Annotation.tsx       # 标注Tab（工具栏+文件列表+Tag列表）
+│   ├── AnnotationEditor.tsx # CM6 编辑器（标注高亮+hint+sentence）
+│   ├── AnnotationTable.tsx  # 标注表格（属性编辑+删除）
+│   ├── ContextMenu.tsx      # 右键菜单（实体创建）
+│   ├── TagPopupMenu.tsx     # 左键菜单（关系链接+删除）
+│   ├── LinkingBanner.tsx    # 链接模式浮动面板
+│   ├── RelationLines.tsx    # SVG 关系连线
+│   ├── Statistics.tsx       # 统计（占位）
+│   ├── Export.tsx           # 导出（占位）
+│   ├── Adjudication.tsx     # IAA（占位）
+│   ├── Converter.tsx        # 转换（占位）
+│   ├── ErrorAnalysis.tsx    # 错误分析（占位）
+│   └── Toolkit.tsx          # 工具集（占位）
 │
-├── parsers/                 # 解析器（从原版直接移植）
-│   ├── ann-parser.ts
-│   ├── dtd-parser.ts
-│   ├── brat-parser.ts
-│   ├── bioc-parser.ts
-│   └── __tests__/           # Vitest 单元测试
-│       ├── dtd-parser.test.ts
-│       ├── ann-parser.test.ts
-│       ├── brat-parser.test.ts
-│       └── bioc-parser.test.ts
+├── editor/                  # CM6 编辑器模块
+│   ├── cm-setup.ts          # Extension 数组
+│   ├── cm-decorations.ts    # 3层 StateField（tag+selected+hint）
+│   ├── cm-theme.ts          # 主题 + 动态颜色注入
+│   └── cm-spans.ts          # spans ↔ CM6位置 转换
+│
+├── parsers/                 # 解析器（从原版移植）
+│   ├── dtd-parser.ts        # Schema 解析（DTD/JSON/YAML）
+│   ├── ann-parser.ts        # 标注 XML 解析 + hint 字典
+│   ├── brat-parser.ts       # BRAT 格式转换
+│   ├── bioc-parser.ts       # BioC XML 导出
+│   └── __tests__/           # 12 个测试
 │
 └── utils/                   # 工具函数
-    ├── file-helper.ts       # 文件操作（Electron fs）
-    └── iaa-calculator.ts    # IAA算法
+    ├── file-helper.ts       # 文件读取/下载
+    ├── tag-helper.ts        # makeEtag/makeRtag
+    ├── nlp-toolkit.ts       # 分句器 + 偏移映射
+    └── __tests__/           # 9 个测试
 ```
 
 ### 技术映射
@@ -214,7 +221,7 @@ MedTator-React/src/
 - [x] brat_parser → TypeScript (560行)
 - [x] bioc_parser → TypeScript (229行)
 - [x] 代码审查（逐函数对照原版，修复9个问题）
-- [x] 单元测试：Vitest + jsdom，67个测试全部通过
+- [x] 单元测试：Vitest + jsdom，21个核心测试
 - [x] 用sample/数据验证（DTD解析、roundtrip、BRAT数据生成）
 
 #### M3-状态管理 + 文件操作 (3天) - ✅ 已完成
@@ -222,13 +229,13 @@ MedTator-React/src/
 - [x] 浏览器文件操作（input+drag&drop，Schema/Annotation加载+UI更新）✅ Step 2 (2026-02-12)
 - [~] ZIP打包（JSZip）- **跳过**，延后到 M7 之后（非核心功能）
 
-#### M4-标注编辑器 (12天) ⭐ 核心
-- [ ] 文件列表 + CodeMirror编辑器
-- [ ] 实体标注（选中文本 → 创建标签）
-- [ ] 关系标注（连线 + 属性）
-- [ ] BRAT可视化封装
-- [ ] 快捷键
-- [ ] 对应原版: app_hotpot.js (3795行) + ext模块
+#### M4-标注编辑器 (12天) ⭐ 核心 - ✅ 已完成
+- [x] Phase 1-4: CM6 + 右键菜单 + 实体创建 + 表格交互
+- [x] Phase 5-6: 关系链接 + 连线渲染
+- [x] Phase 7: 保存(Ctrl+S) + 快捷键(1-9,a,c,v,b) + 搜索(Ctrl+F)
+- [x] Phase 8: Hint 系统（hint 字典 + 点击接受 + Accept All）
+- [x] Phase 9: Sentence 分句模式（nlp-toolkit + 偏移映射）
+- [x] Phase 10: 连线过滤 + 加载进度
 
 #### M5-Schema编辑器 (3天)
 - [ ] DTD编辑器 (CodeMirror)

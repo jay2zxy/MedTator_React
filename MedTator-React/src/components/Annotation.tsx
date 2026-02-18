@@ -1,9 +1,11 @@
-import { useRef, useMemo } from 'react'
-import { Radio, Button, Switch, Select, Input, Divider, message } from 'antd'
+import { useRef, useMemo, useEffect } from 'react'
+import { Radio, Button, Switch, Select, Input, Divider, Modal, Spin, message } from 'antd'
 import {
   SearchOutlined,
   ClearOutlined,
   FolderOpenOutlined,
+  SaveOutlined,
+  PlusOutlined,
   TagOutlined,
   LinkOutlined,
   LeftOutlined,
@@ -13,23 +15,59 @@ import {
   EditOutlined,
   ToolOutlined,
   InfoCircleOutlined,
+  DeleteOutlined,
+  MinusCircleOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons'
+import { openSearchPanel } from '@codemirror/search'
 import { useAppStore } from '../store'
-import { readFileAsText, isSchemaFile, isAnnotationFile } from '../utils/file-helper'
+import { readFileAsText, isSchemaFile, isAnnotationFile, downloadTextAsFile } from '../utils/file-helper'
 import { parse as parseDtd } from '../parsers/dtd-parser'
-import { xml2ann, txt2ann } from '../parsers/ann-parser'
+import { xml2ann, txt2ann, ann2xml, xml2str, getNextTagId } from '../parsers/ann-parser'
 import { assignTagColors } from '../editor/cm-theme'
+import { makeEmptyEtagByDef, makeEmptyRtagByDef } from '../utils/tag-helper'
+import { editorViewRef } from './AnnotationEditor'
 import AnnotationEditor from './AnnotationEditor'
+import AnnotationTable from './AnnotationTable'
+import type { DtdTag } from '../types'
+
+// ── Shortcut keys: etags[0]='1', etags[1]='2', ... (mirrors original app_hotpot) ──
+
+const APP_SHORTCUTS = ['1','2','3','4','5','6','7','8','9','a','c','v','b']
+
+function assignTagShortcuts(dtd: ReturnType<typeof parseDtd>): void {
+  if (!dtd) return
+  dtd.etags.forEach((tag, i) => {
+    tag.shortcut = i < APP_SHORTCUTS.length ? APP_SHORTCUTS[i] : null
+  })
+}
+
+// ── Save helper (reads store directly, safe to call from event handlers) ──
+
+function saveCurrentXml(): string | null {
+  const { anns, annIdx, dtd, setAnnSaved } = useAppStore.getState()
+  if (annIdx === null || !dtd) return null
+  const ann = anns[annIdx]
+  const xmlDoc = ann2xml(ann, dtd)
+  const xmlStr = xml2str(xmlDoc)
+  const filename = ann._filename || `${dtd.name}.xml`
+  downloadTextAsFile(filename, xmlStr)
+  setAnnSaved()
+  return filename
+}
 
 /* ── 工具栏 Ribbon ── */
 function ToolbarRibbon() {
   const dtd = useAppStore(state => state.dtd)
   const setDtd = useAppStore(state => state.setDtd)
+  const anns = useAppStore(state => state.anns)
+  const annIdx = useAppStore(state => state.annIdx)
   const addAnns = useAppStore(state => state.addAnns)
   const startLoading = useAppStore(state => state.startLoading)
   const updateLoading = useAppStore(state => state.updateLoading)
   const finishLoading = useAppStore(state => state.finishLoading)
+  const isLoadingAnns = useAppStore(state => state.isLoadingAnns)
+  const msgLoadingAnns = useAppStore(state => state.msgLoadingAnns)
   const cm = useAppStore(state => state.cm)
   const setCm = useAppStore(state => state.setCm)
 
@@ -55,6 +93,7 @@ function ToolbarRibbon() {
       }
 
       assignTagColors(parsed)
+      assignTagShortcuts(parsed)
       setDtd(parsed)
       message.success(`Schema loaded: ${parsed.name}`)
     } catch (error) {
@@ -101,6 +140,8 @@ function ToolbarRibbon() {
 
     addAnns(newAnns)
     finishLoading()
+    // Rebuild hint dictionary from all loaded annotations
+    useAppStore.getState().rebuildHintDict()
     message.success(`Loaded ${loaded} files (${errors} errors)`)
   }
 
@@ -145,13 +186,14 @@ function ToolbarRibbon() {
           style={{
             border: '2px dashed #d9d9d9',
             borderRadius: 4,
-            padding: '4px 12px',
+            padding: '4px 8px',
             textAlign: 'center',
             cursor: 'pointer',
             color: dtd ? '#52c41a' : '#999',
-            fontSize: 12,
-            minWidth: 120,
+            fontSize: 11,
+            minWidth: 110,
             background: dtd ? '#f6ffed' : 'transparent',
+            lineHeight: 1.5,
           }}
           onClick={() => schemaInputRef.current?.click()}
           onDragOver={e => e.preventDefault()}
@@ -161,26 +203,74 @@ function ToolbarRibbon() {
             if (file) handleSchemaFile(file)
           }}
         >
-          {dtd ? `✓ ${dtd.name}` : <>Drop a <b>Schema</b> File Here</>}
+          {dtd ? (
+            <>
+              <b>{dtd.name}</b><br />
+              {dtd.etags.length} Entity / {dtd.rtags.length} Link Tags
+            </>
+          ) : <>Drop a <b>Schema</b> File Here</>}
         </div>
       </ToolbarGroup>
 
-      {/* Annotation File */}
+      {/* Annotation File — dropzone showing current-file status */}
       <ToolbarGroup label="Annotation File (.xml)">
-        {dtd ? (
+        <div
+          style={{
+            border: '2px dashed #d9d9d9',
+            borderRadius: 4,
+            padding: '4px 8px',
+            textAlign: 'center',
+            cursor: dtd ? 'pointer' : 'default',
+            fontSize: 11,
+            minWidth: 110,
+            minHeight: 42,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: annIdx !== null ? '#f0f5ff' : 'transparent',
+            lineHeight: 1.5,
+          }}
+          onClick={() => dtd && annInputRef.current?.click()}
+          onDragOver={e => { if (dtd) e.preventDefault() }}
+          onDrop={e => {
+            e.preventDefault()
+            if (!dtd) return
+            const files = Array.from(e.dataTransfer.files)
+            if (files.length > 0) handleAnnotationFiles(files)
+          }}
+        >
+          {isLoadingAnns ? (
+            <span style={{ color: '#1890ff' }}><Spin size="small" /> {msgLoadingAnns}</span>
+          ) : !dtd ? (
+            <span style={{ color: '#999' }}>&larr; Load schema file first</span>
+          ) : annIdx !== null ? (
+            <>
+              <b style={{ fontSize: 11 }}>{anns[annIdx]._filename}</b><br />
+              <span style={{ color: '#888' }}>{anns[annIdx].text.length} chars · {anns[annIdx].tags.length} tags</span>
+            </>
+          ) : anns.length === 0 ? (
+            <>Drop <b>Annotation</b><br />File(s) Here</>
+          ) : (
+            <span style={{ color: '#888' }}>Select file<br />in the list</span>
+          )}
+        </div>
+      </ToolbarGroup>
+
+      {/* Save — shown only when a file is open */}
+      {annIdx !== null && (
+        <ToolbarGroup label="Save">
           <Button
             size="small"
-            icon={<FolderOpenOutlined />}
-            onClick={() => annInputRef.current?.click()}
+            icon={<SaveOutlined />}
+            onClick={() => {
+              const fn = saveCurrentXml()
+              if (fn) message.success(`Downloaded ${fn}`)
+            }}
           >
-            Load Files
+            Save XML
           </Button>
-        ) : (
-          <div style={{ color: '#999', fontSize: 12 }}>
-            &larr; Load schema file first
-          </div>
-        )}
-      </ToolbarGroup>
+        </ToolbarGroup>
+      )}
 
       {/* Display Mode */}
       <ToolbarGroup label="Display Mode">
@@ -194,8 +284,12 @@ function ToolbarRibbon() {
       {/* Search */}
       <ToolbarGroup label="Search">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Button size="small" icon={<SearchOutlined />}>Search</Button>
-          <Button size="small" icon={<ClearOutlined />}>Clear</Button>
+          <Button size="small" icon={<SearchOutlined />} onClick={() => {
+            if (editorViewRef.current) openSearchPanel(editorViewRef.current)
+          }}>Search</Button>
+          <Button size="small" icon={<ClearOutlined />} onClick={() => {
+            if (editorViewRef.current) editorViewRef.current.focus()
+          }}>Clear</Button>
         </div>
       </ToolbarGroup>
 
@@ -216,6 +310,9 @@ function ToolbarRibbon() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Switch size="small" checked={cm.enabledLinkComplex} onChange={v => setCm({ enabledLinkComplex: v })} /> <span>Show Lines</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Switch size="small" checked={cm.enabledLinkName} onChange={v => setCm({ enabledLinkName: v })} /> <span>Show Link Name</span>
+          </div>
         </div>
       </ToolbarGroup>
 
@@ -232,7 +329,21 @@ function ToolbarRibbon() {
             <Radio.Button value="simple">Simple Hint</Radio.Button>
             <Radio.Button value="off"><StopOutlined /> No Hint</Radio.Button>
           </Radio.Group>
-          <Button size="small" icon={<CheckOutlined />}>Accept All</Button>
+          <Button size="small" icon={<CheckOutlined />} onClick={() => {
+            const { hints, acceptAllHints } = useAppStore.getState()
+            if (hints.length === 0) {
+              message.info('No hints to accept')
+              return
+            }
+            Modal.confirm({
+              title: 'Accept All Hints',
+              content: `Accept all ${hints.length} hints as annotations?`,
+              onOk: () => {
+                acceptAllHints()
+                message.success(`Accepted ${hints.length} hints`)
+              },
+            })
+          }}>Accept All</Button>
         </div>
       </ToolbarGroup>
 
@@ -281,6 +392,8 @@ function FileListPanel() {
   const anns = useAppStore(state => state.anns)
   const annIdx = useAppStore(state => state.annIdx)
   const setAnnIdx = useAppStore(state => state.setAnnIdx)
+  const removeAnn = useAppStore(state => state.removeAnn)
+  const clearAnns = useAppStore(state => state.clearAnns)
   const sortAnnsBy = useAppStore(state => state.sortAnnsBy)
   const setSortAnnsBy = useAppStore(state => state.setSortAnnsBy)
   const fnPattern = useAppStore(state => state.fnPattern)
@@ -348,8 +461,19 @@ function FileListPanel() {
           onChange={e => setFnPattern(e.target.value)}
           allowClear
         />
-        <Button size="small" type="text" style={{ fontSize: 11 }} onClick={() => setFnPattern('')}>
-          All
+        <span style={{ color: '#888', whiteSpace: 'nowrap' }}>{displayedAnns.length} files</span>
+        <Button
+          size="small"
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          title="Remove all files"
+          onClick={() => {
+            if (anns.length === 0) return
+            clearAnns()
+            message.success('Removed all files')
+          }}
+        >
         </Button>
       </div>
 
@@ -380,10 +504,26 @@ function FileListPanel() {
                   fontSize: 12,
                   marginBottom: 2,
                   border: isSelected ? '1px solid #91d5ff' : '1px solid transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
                 onClick={() => setAnnIdx(realIdx)}
               >
-                {ann._filename || `File ${realIdx + 1}`}
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {ann._has_saved === false && <span style={{ color: '#f5222d' }}>* </span>}
+                  {ann._filename || `File ${realIdx + 1}`}
+                </span>
+                <span style={{ color: '#888', fontSize: 11, minWidth: 16, textAlign: 'right' }}>
+                  {ann.tags.length}
+                </span>
+                <MinusCircleOutlined
+                  style={{ color: '#999', fontSize: 12 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeAnn(realIdx)
+                  }}
+                />
               </div>
             )
           })
@@ -423,10 +563,39 @@ function FileListPanel() {
 /* ── Tag 定义列表 ── */
 function TagListPanel() {
   const dtd = useAppStore(state => state.dtd)
+  const anns = useAppStore(state => state.anns)
+  const annIdx = useAppStore(state => state.annIdx)
   const displayTagName = useAppStore(state => state.displayTagName)
   const setDisplayTagName = useAppStore(state => state.setDisplayTagName)
+  const addTag = useAppStore(state => state.addTag)
 
   const totalTags = (dtd?.etags.length || 0) + (dtd?.rtags.length || 0)
+
+  // Count annotated tags in the current file
+  const tagCounts = useMemo(() => {
+    if (annIdx === null || !anns[annIdx]) return {} as Record<string, number>
+    const counts: Record<string, number> = {}
+    for (const tag of anns[annIdx].tags) {
+      counts[tag.tag] = (counts[tag.tag] || 0) + 1
+    }
+    return counts
+  }, [anns, annIdx])
+
+  const handleAddEmptyEtag = (tagDef: DtdTag) => {
+    const { anns: a, annIdx: i } = useAppStore.getState()
+    if (i === null) return
+    const tag = makeEmptyEtagByDef(tagDef)
+    tag.id = getNextTagId(a[i], tagDef)
+    addTag(tag)
+  }
+
+  const handleAddEmptyRtag = (tagDef: DtdTag) => {
+    const { anns: a, annIdx: i } = useAppStore.getState()
+    if (i === null) return
+    const tag = makeEmptyRtagByDef(tagDef)
+    tag.id = getNextTagId(a[i], tagDef)
+    addTag(tag)
+  }
 
   return (
     <div style={{ width: 250, minWidth: 250, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e9e9e9' }}>
@@ -463,31 +632,48 @@ function TagListPanel() {
                 <div style={{ fontSize: 11, fontWeight: 'bold', color: '#888', marginBottom: 4 }}>
                   <TagOutlined /> Entity Tags ({dtd.etags.length})
                 </div>
-                {dtd.etags.map(tag => (
+                {dtd.etags.map((tag, i) => (
                   <div
                     key={tag.name}
                     style={{
-                      padding: '2px 8px',
+                      padding: '2px 4px 2px 8px',
                       cursor: 'pointer',
                       fontSize: 12,
                       marginBottom: 2,
                       borderRadius: 4,
                       background: displayTagName === tag.name ? '#e6f7ff' : 'transparent',
                       border: displayTagName === tag.name ? '1px solid #91d5ff' : '1px solid transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                     }}
                     onClick={() => setDisplayTagName(tag.name)}
                   >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 12,
-                        height: 12,
-                        borderRadius: 2,
-                        background: tag.style?.color || '#333',
-                        marginRight: 6,
-                      }}
-                    />
-                    {tag.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                      <span style={{
+                        display: 'inline-block', width: 12, height: 12,
+                        borderRadius: 2, background: tag.style?.color || '#333', flexShrink: 0,
+                      }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag.name}</span>
+                      {tag.shortcut && (
+                        <span style={{ fontSize: 10, color: '#aaa', border: '1px solid #ddd', borderRadius: 2, padding: '0 2px', flexShrink: 0 }}>
+                          {APP_SHORTCUTS[i]}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#888', minWidth: 14, textAlign: 'right' }}>
+                        {annIdx !== null ? (tagCounts[tag.name] || 0) : ''}
+                      </span>
+                      {tag.is_non_consuming && annIdx !== null && (
+                        <Button
+                          type="text" size="small" icon={<PlusOutlined />}
+                          style={{ padding: '0 2px', height: 16, fontSize: 10 }}
+                          title="Add a document-level tag"
+                          onClick={e => { e.stopPropagation(); handleAddEmptyEtag(tag) }}
+                        />
+                      )}
+                    </div>
                   </div>
                 ))}
               </>
@@ -508,27 +694,39 @@ function TagListPanel() {
                   <div
                     key={tag.name}
                     style={{
-                      padding: '2px 8px',
+                      padding: '2px 4px 2px 8px',
                       cursor: 'pointer',
                       fontSize: 12,
                       marginBottom: 2,
                       borderRadius: 4,
                       background: displayTagName === tag.name ? '#e6f7ff' : 'transparent',
                       border: displayTagName === tag.name ? '1px solid #91d5ff' : '1px solid transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                     }}
                     onClick={() => setDisplayTagName(tag.name)}
                   >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 12,
-                        height: 12,
-                        borderRadius: 2,
-                        background: tag.style?.color || '#666',
-                        marginRight: 6,
-                      }}
-                    />
-                    {tag.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                      <span style={{
+                        display: 'inline-block', width: 12, height: 12,
+                        borderRadius: 2, background: tag.style?.color || '#666', flexShrink: 0,
+                      }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#888', minWidth: 14, textAlign: 'right' }}>
+                        {annIdx !== null ? (tagCounts[tag.name] || 0) : ''}
+                      </span>
+                      {annIdx !== null && (
+                        <Button
+                          type="text" size="small" icon={<PlusOutlined />}
+                          style={{ padding: '0 2px', height: 16, fontSize: 10 }}
+                          title="Add an empty link tag"
+                          onClick={e => { e.stopPropagation(); handleAddEmptyRtag(tag) }}
+                        />
+                      )}
+                    </div>
                   </div>
                 ))}
               </>
@@ -540,70 +738,21 @@ function TagListPanel() {
   )
 }
 
-/* ── 标注表格 ── */
-function AnnotationTable() {
-  const anns = useAppStore(state => state.anns)
-  const annIdx = useAppStore(state => state.annIdx)
-  const displayTagName = useAppStore(state => state.displayTagName)
-
-  const currentAnn = annIdx !== null ? anns[annIdx] : null
-
-  // Filter tags by displayTagName
-  const displayedTags = useMemo(() => {
-    if (!currentAnn) return []
-    if (displayTagName === '__all__') return currentAnn.tags
-    return currentAnn.tags.filter(tag => tag.tag === displayTagName)
-  }, [currentAnn, displayTagName])
-
-  return (
-    <div style={{ flex: 1, overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: '#fafafa', borderBottom: '1px solid #e9e9e9', position: 'sticky', top: 0 }}>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 100 }}>Tag</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 50 }}>ID</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', width: 100 }}>Spans</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', minWidth: 150 }}>Text</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Attributes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {displayedTags.length === 0 ? (
-            <tr>
-              <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: '#ccc' }}>
-                {currentAnn ? 'No annotations' : 'Select a file to view annotations'}
-              </td>
-            </tr>
-          ) : (
-            displayedTags.map((tag, idx) => {
-              const spansText = tag.spans || ''
-              const tagText = tag.text || ''
-              const attrs = Object.entries(tag)
-                .filter(([k, v]) => !['tag', 'id', 'spans', 'text', 'type'].includes(k) && v)
-                .map(([k, v]) => `${k}=${v}`)
-                .join(', ')
-
-              return (
-                <tr key={tag.id || idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '4px 8px' }}>{tag.tag}</td>
-                  <td style={{ padding: '4px 8px', color: '#888' }}>{tag.id}</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: 11 }}>{spansText}</td>
-                  <td style={{ padding: '4px 8px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {tagText}
-                  </td>
-                  <td style={{ padding: '4px 8px', color: '#666', fontSize: 11 }}>{attrs}</td>
-                </tr>
-              )
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 /* ── 主组件 ── */
 export default function Annotation() {
+  // Ctrl+S shortcut — download current annotation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        const fn = saveCurrentXml()
+        if (fn) message.success(`Downloaded ${fn}`)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* 工具栏 */}
