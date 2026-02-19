@@ -2,7 +2,19 @@
  * Tag creation helpers
  * Migrated from templates/js/app_hotpot.js (lines 3348-3435)
  */
-import type { Ann, AnnTag, DtdTag, DtdAttr } from '../types'
+import type { Ann, AnnTag, DtdTag, DtdAttr, Dtd } from '../types'
+
+// Keyboard shortcuts for entity tags (mirrors original app_hotpot.js)
+export const APP_SHORTCUTS = ['1','2','3','4','5','6','7','8','9','a','c','v','b']
+
+/**
+ * Assign keyboard shortcuts to etags in order
+ */
+export function assignTagShortcuts(dtd: Pick<Dtd, 'etags'>): void {
+  dtd.etags.forEach((tag, i) => {
+    tag.shortcut = i < APP_SHORTCUTS.length ? APP_SHORTCUTS[i] : null
+  })
+}
 import { getNextTagId } from '../parsers/ann-parser'
 import { NON_CONSUMING_SPANS } from '../parsers/dtd-parser'
 

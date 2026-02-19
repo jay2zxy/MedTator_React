@@ -25,22 +25,12 @@ import { readFileAsText, isSchemaFile, isAnnotationFile, downloadTextAsFile } fr
 import { parse as parseDtd } from '../parsers/dtd-parser'
 import { xml2ann, txt2ann, ann2xml, xml2str, getNextTagId } from '../parsers/ann-parser'
 import { assignTagColors } from '../editor/cm-theme'
-import { makeEmptyEtagByDef, makeEmptyRtagByDef } from '../utils/tag-helper'
+import { makeEmptyEtagByDef, makeEmptyRtagByDef, APP_SHORTCUTS, assignTagShortcuts } from '../utils/tag-helper'
 import { editorViewRef } from './AnnotationEditor'
 import AnnotationEditor from './AnnotationEditor'
 import AnnotationTable from './AnnotationTable'
+import SchemaEditor from './SchemaEditor'
 import type { DtdTag } from '../types'
-
-// ── Shortcut keys: etags[0]='1', etags[1]='2', ... (mirrors original app_hotpot) ──
-
-const APP_SHORTCUTS = ['1','2','3','4','5','6','7','8','9','a','c','v','b']
-
-function assignTagShortcuts(dtd: ReturnType<typeof parseDtd>): void {
-  if (!dtd) return
-  dtd.etags.forEach((tag, i) => {
-    tag.shortcut = i < APP_SHORTCUTS.length ? APP_SHORTCUTS[i] : null
-  })
-}
 
 // ── Save helper (reads store directly, safe to call from event handlers) ──
 
@@ -70,6 +60,9 @@ function ToolbarRibbon() {
   const msgLoadingAnns = useAppStore(state => state.msgLoadingAnns)
   const cm = useAppStore(state => state.cm)
   const setCm = useAppStore(state => state.setCm)
+
+  const openSchemaEditorNew = useAppStore(state => state.openSchemaEditorNew)
+  const openSchemaEditorCopy = useAppStore(state => state.openSchemaEditorCopy)
 
   const schemaInputRef = useRef<HTMLInputElement>(null)
   const annInputRef = useRef<HTMLInputElement>(null)
@@ -210,6 +203,12 @@ function ToolbarRibbon() {
             </>
           ) : <>Drop a <b>Schema</b> File Here</>}
         </div>
+        <Button
+          size="small"
+          icon={<ToolOutlined />}
+          title="Schema Editor"
+          onClick={() => dtd ? openSchemaEditorCopy() : openSchemaEditorNew()}
+        />
       </ToolbarGroup>
 
       {/* Annotation File — dropzone showing current-file status */}
@@ -306,9 +305,6 @@ function ToolbarRibbon() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Switch size="small" checked={cm.enabledLinks} onChange={v => setCm({ enabledLinks: v })} /> <span>Show Links</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Switch size="small" checked={cm.enabledLinkComplex} onChange={v => setCm({ enabledLinkComplex: v })} /> <span>Show Lines</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Switch size="small" checked={cm.enabledLinkName} onChange={v => setCm({ enabledLinkName: v })} /> <span>Show Link Name</span>
@@ -769,6 +765,9 @@ export default function Annotation() {
         <TagListPanel />
         <AnnotationTable />
       </div>
+
+      {/* Schema Editor modal */}
+      <SchemaEditor />
     </div>
   )
 }

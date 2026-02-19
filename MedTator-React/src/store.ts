@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Dtd, Ann, AnnTag, DtdTag, DtdAttr } from './types'
 import { getNextTagId, anns2hintDict, addTagToHintDict } from './parsers/ann-parser'
+import { mkBaseDtd } from './parsers/dtd-parser'
 import type { HintDict } from './parsers/ann-parser'
 import { makeEtag } from './utils/tag-helper'
 
@@ -109,6 +110,15 @@ interface AppState {
   // ─ CodeMirror Settings ─
   cm: CmSettings
   setCm: (update: Partial<CmSettings>) => void
+
+  // ─ Schema Editor ─
+  seDtd: Dtd | null
+  seOpen: boolean
+  openSchemaEditorNew: () => void
+  openSchemaEditorCopy: () => void
+  openSchemaEditorLoad: (dtd: Dtd) => void
+  closeSchemaEditor: () => void
+  setSeDtd: (dtd: Dtd) => void
 }
 
 // ── Store ──
@@ -425,4 +435,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     enabledLinkComplex: true,
   },
   setCm: (update) => set((s) => ({ cm: { ...s.cm, ...update } })),
+
+  // ─ Schema Editor ─
+  seDtd: null,
+  seOpen: false,
+  openSchemaEditorNew: () => set({ seDtd: mkBaseDtd('NEW_SCHEMA'), seOpen: true }),
+  openSchemaEditorCopy: () => {
+    const { dtd } = get()
+    const seDtd = dtd ? JSON.parse(JSON.stringify(dtd)) : mkBaseDtd('NEW_SCHEMA')
+    set({ seDtd, seOpen: true })
+  },
+  openSchemaEditorLoad: (dtd) => set({ seDtd: dtd, seOpen: true }),
+  closeSchemaEditor: () => set({ seOpen: false }),
+  setSeDtd: (dtd) => set({ seDtd: dtd }),
 }))

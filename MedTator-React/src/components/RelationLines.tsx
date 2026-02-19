@@ -33,7 +33,6 @@ export default function RelationLines({ viewRef }: Props) {
   const displayTagName = useAppStore((s) => s.displayTagName)
   const enabledLinks = useAppStore((s) => s.cm.enabledLinks)
   const enabledLinkName = useAppStore((s) => s.cm.enabledLinkName)
-  const enabledLinkComplex = useAppStore((s) => s.cm.enabledLinkComplex)
 
   const [lines, setLines] = useState<LineData[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -47,7 +46,7 @@ export default function RelationLines({ viewRef }: Props) {
 
     const ann = curIdx !== null ? curAnns[curIdx] : null
 
-    if (!view || !container || !ann || !curDtd || !cm.enabledLinks || !cm.enabledLinkComplex) {
+    if (!view || !container || !ann || !curDtd || !cm.enabledLinks) {
       setLines([])
       return
     }
@@ -155,7 +154,7 @@ export default function RelationLines({ viewRef }: Props) {
       calculateLines()
     })
     return () => cancelAnimationFrame(raf)
-  }, [anns, annIdx, dtd, displayTagName, enabledLinks, enabledLinkComplex, enabledLinkName, calculateLines])
+  }, [anns, annIdx, dtd, displayTagName, enabledLinks, enabledLinkName, calculateLines])
 
   // Recalculate on CM6 scroll
   useEffect(() => {
@@ -175,7 +174,7 @@ export default function RelationLines({ viewRef }: Props) {
     return () => window.removeEventListener('resize', handleResize)
   }, [calculateLines])
 
-  if (!enabledLinks || !enabledLinkComplex) return null
+  if (!enabledLinks) return null
 
   return (
     <div
