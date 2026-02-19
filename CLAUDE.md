@@ -1212,3 +1212,25 @@ return {
 - [x] Phase 10: 小修复（连线过滤 + 加载进度） ✅
 
 ---
+
+## Session 5.1 — M5: 可视化 Schema Editor (2026-02-19, Sonnet → Opus)
+
+对照原版 `app_hotpot_ext_se.js` (380行) + `_annotator_mui_annotation_schema_editor.html` (332行)。
+
+**新增/修改：**
+- `store.ts` (+23行): `seDtd`/`seOpen` 状态 + 5 个 actions (openNew/Copy/Load, close, setSeDtd)
+- `utils/tag-helper.ts` (+14行): 导出 `APP_SHORTCUTS` + `assignTagShortcuts`（从 Annotation.tsx 提取）
+- `components/SchemaEditor.tsx` (~290行): Ant Design Modal，Tag/Attr CRUD，Sample 加载，Use/Download
+- `components/Annotation.tsx`: 添加 Schema Editor 图标按钮 + 渲染 `<SchemaEditor />`
+- `components/RelationLines.tsx`: 移除 `enabledLinkComplex`（Show Lines 开关删除）
+
+**关键模式：**
+- 深拷贝 + mutate: `JSON.parse(JSON.stringify(seDtd))` → mutate → `setSeDtd(copy)`
+- "Use" 流程: `extendBaseDtd → assignTagColors → assignTagShortcuts → injectTagColors → setDtd → clearAnns`
+- Sample DTD: Vite `?raw` 导入 4 个 sample/ 目录的 .dtd 文件
+- Sticky 工具栏: `top: -8px`（补偿 Modal body padding）
+- Modal `zIndex: 2000`，LIST DEFAULT 用 Select + `popupMatchSelectWidth={false}`
+
+**验证**: 编译零错误，21 测试通过，浏览器功能正常
+
+---

@@ -237,9 +237,8 @@ MedTator-React/src/
 - [x] Phase 9: Sentence 分句模式（nlp-toolkit + 偏移映射）
 - [x] Phase 10: 连线过滤 + 加载进度
 
-#### M5-Schema编辑器 (3天)
-- [ ] DTD编辑器 (CodeMirror)
-- [ ] Schema验证
+#### M5-Schema编辑器 (1天) - ✅ 已完成
+- [x] 可视化 Schema Editor 弹窗（对照原版 app_hotpot_ext_se.js + HTML）
 
 #### M6-其他功能Tab (6天)
 - [ ] Statistics (统计 + ECharts)

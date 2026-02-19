@@ -399,4 +399,47 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 
 ---
 
-*最后更新: 2026-02-18*
+### 2026-02-19 - Session 5.1 M5: Schema Editor
+
+**模型**: Sonnet 4.5 → Opus 4.6
+
+**Store 扩展** (`store.ts`):
+- ✅ 新增: `seDtd`, `seOpen` 状态
+- ✅ 新增 actions: `openSchemaEditorNew`, `openSchemaEditorCopy`, `openSchemaEditorLoad`, `closeSchemaEditor`, `setSeDtd`
+
+**新增组件**：
+- ✅ `components/SchemaEditor.tsx` (~290行)：Ant Design Modal (1020px, zIndex=2000)
+  - 水平工具栏 (sticky): Schema Name / New / Open / Sample+Load / Use / Download(YAML|JSON|DTD)
+  - 两区块: Entity Tags + Relation Tags，每个 tag 水平 TagRow 布局
+  - Tag CRUD: 添加/删除 tag，名称验证 `[A-Za-z0-9_]`
+  - Attr CRUD: 添加/删除属性，text/list/idref 三种类型
+  - LIST DEFAULT: Select 下拉框 (从 att.values 填充，`popupMatchSelectWidth={false}`)
+  - is_non_consuming 切换: "SPAN" / "DOCUMENT + SPAN"
+  - Sample DTD: Vite `?raw` 导入 4 个 sample 文件
+  - "Use": `extendBaseDtd → assignTagColors → assignTagShortcuts → injectTagColors → setDtd → clearAnns`
+
+**修改文件**：
+- ✅ `Annotation.tsx`: 添加 Schema Editor 图标按钮 (ToolOutlined) + 渲染 `<SchemaEditor />`
+- ✅ `utils/tag-helper.ts`: 导出 `APP_SHORTCUTS` + `assignTagShortcuts`（从 Annotation.tsx 提取）
+- ✅ `RelationLines.tsx`: 移除 `enabledLinkComplex` 引用（"Show Lines" 开关已删除）
+
+**UI 迭代（多轮修复）**：
+- 🐛 两列布局 → 改为水平 TagRow（对齐原版）
+- 🐛 按钮导致工具栏过高 → 改为 icon-only 按钮
+- 🐛 LIST DEFAULT 无预选项 → 改为 Select 下拉框
+- 🐛 下拉框截断 → `popupMatchSelectWidth={false}`
+- 🐛 Modal z-index → `zIndex={2000}`
+- 🐛 工具栏随滚动消失 → `position: sticky`
+- 🐛 sticky 顶部有空隙 → `top: -8px, marginTop: -8px, paddingTop: 8px`（补偿 Modal body padding）
+
+**验证**：
+- ✅ 编译零错误，21 测试通过
+- ✅ 浏览器: 打开/编辑/加载 sample/Use/Download 全部正常
+
+**M5 Schema Editor — 完成** 🎉
+
+**下一步**：M6 其他功能 Tab
+
+---
+
+*最后更新: 2026-02-19*
