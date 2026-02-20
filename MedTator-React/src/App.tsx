@@ -6,7 +6,6 @@ import Statistics from './components/Statistics'
 import Export from './components/Export'
 import Adjudication from './components/Adjudication'
 import Converter from './components/Converter'
-import ErrorAnalysis from './components/ErrorAnalysis'
 import Toolkit from './components/Toolkit'
 
 const tabComponents = {
@@ -15,7 +14,6 @@ const tabComponents = {
   export: Export,
   adjudication: Adjudication,
   converter: Converter,
-  'error-analysis': ErrorAnalysis,
   toolkit: Toolkit,
 }
 

@@ -13,7 +13,6 @@ export type TabKey =
   | 'export'
   | 'adjudication'
   | 'converter'
-  | 'error-analysis'
   | 'toolkit'
 
 export type SortAnnsBy =
