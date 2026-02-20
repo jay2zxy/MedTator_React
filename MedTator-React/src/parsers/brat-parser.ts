@@ -110,15 +110,40 @@ export function ann2brat(ann: any, dtd: Dtd): string[] {
   return rs
 }
 
-// ── MedTagger output → brat format ──
+// ── MedTagger .ann file parser (from medtagger_toolkit.js) ──
 
-interface MedTaggerRecord {
+export interface MedTaggerRecord {
   norm: string
   start: string
   end: string
   certainty?: string
   status?: string
   [key: string]: any
+}
+
+const KV_REGEX = /(\S+)="([^"]+)"/gm
+
+function parseMedTaggerLine(line: string): MedTaggerRecord | null {
+  if (!line.trim()) return null
+  const parts = line.split('\t')
+  const r: Record<string, string> = {}
+  for (const p of parts) {
+    const regex = new RegExp(KV_REGEX.source, KV_REGEX.flags)
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(p)) !== null) {
+      r[m[1]] = m[2]
+    }
+  }
+  return Object.keys(r).length > 0 ? (r as unknown as MedTaggerRecord) : null
+}
+
+export function parseMedTaggerAnn(text: string): MedTaggerRecord[] {
+  const rs: MedTaggerRecord[] = []
+  for (const line of text.split('\n')) {
+    const r = parseMedTaggerLine(line)
+    if (r) rs.push(r)
+  }
+  return rs
 }
 
 export function medtagger2brat(

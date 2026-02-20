@@ -5,7 +5,6 @@ import {
   ExportOutlined,
   TeamOutlined,
   ExperimentOutlined,
-  BugOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
 import { useAppStore } from '../store'
@@ -17,7 +16,6 @@ const menuItems = [
   { key: 'export', icon: <ExportOutlined />, label: 'Export' },
   { key: 'adjudication', icon: <TeamOutlined />, label: 'Adjudication' },
   { key: 'converter', icon: <ExperimentOutlined />, label: 'Converter' },
-  { key: 'error-analysis', icon: <BugOutlined />, label: 'Error Analysis' },
   { key: 'toolkit', icon: <ToolOutlined />, label: 'Toolkit' },
 ]
 

@@ -34,7 +34,7 @@
 
 ---
 
-### 🚧 进行中 - 项目重构
+### 🚧 项目重构（M1-M6 ✅，M7-M8 待开始）
 
 **实际目录结构**（原版代码保持不动，React 版在 MedTator-React/ 下开发）：
 
@@ -119,8 +119,7 @@ MedTator/  (Git 仓库根目录)
 | Export | ext_exporter.js | 75 | 导出格式 |
 | Adjudication | ext_iaa.js | 738 | 标注者间一致性 |
 | Converter | ext_converter.js | 418 | 格式转换 |
-| Error Analysis | ext_razer.js | 1,314 | NLP错误分析 |
-| Toolkit | ext_toolkit.js | 282 | NLP工具集 |
+| Toolkit | ext_toolkit.js | 282 | NLP工具集(MedTaggerVis) |
 
 **4个解析器 — 纯函数，无DOM依赖：**
 - dtd_parser.js (1092行) — Schema定义解析（DTD/JSON/YAML）
@@ -147,7 +146,7 @@ MedTator-React/src/
 ├── types.ts                 # 类型定义
 │
 ├── components/              # 所有组件扁平放
-│   ├── RibbonMenu.tsx       # 顶部Tab菜单
+│   ├── RibbonMenu.tsx       # 顶部Tab菜单（6个Tab）
 │   ├── Annotation.tsx       # 标注Tab（工具栏+文件列表+Tag列表）
 │   ├── AnnotationEditor.tsx # CM6 编辑器（标注高亮+hint+sentence）
 │   ├── AnnotationTable.tsx  # 标注表格（属性编辑+删除）
@@ -155,12 +154,12 @@ MedTator-React/src/
 │   ├── TagPopupMenu.tsx     # 左键菜单（关系链接+删除）
 │   ├── LinkingBanner.tsx    # 链接模式浮动面板
 │   ├── RelationLines.tsx    # SVG 关系连线
-│   ├── Statistics.tsx       # 统计（占位）
-│   ├── Export.tsx           # 导出（占位）
-│   ├── Adjudication.tsx     # IAA（占位）
-│   ├── Converter.tsx        # 转换（占位）
-│   ├── ErrorAnalysis.tsx    # 错误分析（占位）
-│   └── Toolkit.tsx          # 工具集（占位）
+│   ├── SchemaEditor.tsx     # Schema Editor 弹窗（Tag/Attr CRUD）
+│   ├── Statistics.tsx       # 语料库统计
+│   ├── Export.tsx           # 导出（XML/BioC/JSON/CSV + ZIP）
+│   ├── Adjudication.tsx     # IAA（F1/Cohen's Kappa + 裁决 + Report）
+│   ├── Converter.tsx        # 格式转换（Raw Text/MedTagger → XML）
+│   └── Toolkit.tsx          # MedTaggerVis 可视化工具
 │
 ├── editor/                  # CM6 编辑器模块
 │   ├── cm-setup.ts          # Extension 数组
@@ -171,14 +170,15 @@ MedTator-React/src/
 ├── parsers/                 # 解析器（从原版移植）
 │   ├── dtd-parser.ts        # Schema 解析（DTD/JSON/YAML）
 │   ├── ann-parser.ts        # 标注 XML 解析 + hint 字典
-│   ├── brat-parser.ts       # BRAT 格式转换
+│   ├── brat-parser.ts       # BRAT 格式转换 + MedTagger 解析
 │   ├── bioc-parser.ts       # BioC XML 导出
 │   └── __tests__/           # 12 个测试
 │
 └── utils/                   # 工具函数
     ├── file-helper.ts       # 文件读取/下载
-    ├── tag-helper.ts        # makeEtag/makeRtag
+    ├── tag-helper.ts        # makeEtag/makeRtag + 快捷键分配
     ├── nlp-toolkit.ts       # 分句器 + 偏移映射
+    ├── iaa-calculator.ts    # IAA 计算引擎（F1/Kappa/GS）
     └── __tests__/           # 9 个测试
 ```
 
@@ -240,13 +240,12 @@ MedTator-React/src/
 #### M5-Schema编辑器 (1天) - ✅ 已完成
 - [x] 可视化 Schema Editor 弹窗（对照原版 app_hotpot_ext_se.js + HTML）
 
-#### M6-其他功能Tab (6天)
-- [ ] Statistics (统计 + ECharts)
-- [ ] Export (导出)
-- [ ] Adjudication (IAA + 裁决)
-- [ ] Converter (格式转换)
-- [ ] Error Analysis
-- [ ] Toolkit
+#### M6-其他功能Tab (6天) - ✅ 已完成
+- [x] Phase 1: Statistics（语料库统计）✅ (5c31721)
+- [x] Phase 2: Export（XML/BioC/JSON/CSV + ZIP）✅ (e2a4f90)
+- [x] Phase 3: Converter（Raw Text/MedTagger → XML）✅ (8f8f49e)
+- [x] Phase 4: Adjudication/IAA（F1/Kappa + 裁决 + Report）✅ (c369b98)
+- [x] Phase 5: Toolkit (MedTaggerVis) + 移除 Error Analysis ✅ (845e9d4)
 
 #### M7-Electron打包 (2天)
 - [ ] 主进程 + 预加载脚本
@@ -261,13 +260,13 @@ MedTator-React/src/
 
 ## 📊 开发时间线
 
-**Week 1**: M1 项目搭建 + M2 解析器移植
-**Week 2-3**: M3 状态+文件 + M4 标注编辑器（开始）
-**Week 4-5**: M4 标注编辑器（完成）
-**Week 6-7**: M5 Schema + M6 其他功能Tab
-**Week 8**: M7 Electron打包 + M8 联调修bug
+**Week 1 (2/11)**: M1 项目搭建 + M2 解析器移植 ✅
+**Week 2 (2/12-13)**: M3 状态+文件 + M4 标注编辑器 Phase 1-4 ✅
+**Week 3 (2/17-18)**: M4 Phase 5-10 ✅
+**Week 4 (2/19)**: M5 Schema Editor + M6 全部 5 Phase ✅
+**Week 5+**: M7 Electron打包 + M8 联调修bug
 
-**总计**: 8 周 / 8 个模块（比之前砍了一半）
+**实际进度**: 4 周完成 M1-M6（比计划快），剩余 M7+M8
 
 ---
 
