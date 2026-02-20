@@ -442,4 +442,72 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 
 ---
 
+---
+
+### 2026-02-19 - Session 6.1 M6 Phase 1-3: Statistics + Export + Converter
+
+**Phase 1 — Statistics Tab** (5c31721):
+- ✅ 重写 `Statistics.tsx`：语料库统计（文件数、tag 分布）
+
+**Phase 2 — Export Tab** (e2a4f90):
+- ✅ 重写 `Export.tsx`：支持 XML/BioC/JSON/CSV 导出 + ZIP 批量下载
+
+**Phase 3 — Converter Tab** (8f8f49e):
+- ✅ 重写 `Converter.tsx`：Raw Text→XML + MedTagger→XML 转换
+
+---
+
+### 2026-02-19 - Session 6.2 M6 Phase 4: Adjudication/IAA
+
+**提交**: c369b98（Opus 4.6）
+
+**新增文件**：
+- ✅ `utils/iaa-calculator.ts` (~650行)：IAA 计算引擎
+  - 文档哈希匹配、Tag overlap/exact 匹配、F1/Cohen's Kappa + 95% CI
+  - Gold Standard 裁决、5 个 Excel 报告 sheet
+- ✅ `components/Adjudication.tsx` (~846行)：完整 IAA UI
+  - A/B Dropzone + Calculate + F1 Score 面板 + Cohen's Kappa 混淆矩阵
+  - Tag 详情（accept/reject 裁决）+ ZIP/Excel 导出
+
+**Bug 修复**：
+- 🐛 `evaluateAnnOnDtd` 崩溃：`result.all` 赋值顺序错误 → 移到 `getCohenKappaOverall` 调用前
+- 🐛 xlsx 无 default export → `import * as XLSX`
+- 🐛 calculate 无错误处理 → 加 try-catch + message.error
+
+**验证**：编译零错误，21 测试通过，F1=0.8571 / Kappa=0.6667
+
+---
+
+### 2026-02-19 - Session 6.3 M6 Phase 5: Toolkit + 移除 Error Analysis
+
+**提交**: 845e9d4
+
+- ✅ 删除 `ErrorAnalysis.tsx`（用户决定不需要）
+- ✅ 新增 `Toolkit.tsx` (~270行)：MedTaggerVis 可视化
+  - 三列布局：.txt 文件 | .ann 文件 | 高亮可视化
+  - 拖拽加载 + 点击 .ann 自动匹配 .txt → 渲染实体高亮
+  - Certainty/Status 属性 glyph 显示
+- ✅ `brat-parser.ts` 新增 `parseMedTaggerAnn()` 解析器
+
+**验证**：编译零错误，21 测试通过
+
+**M6 全部 5 个 Phase 完成** 🎉
+
+---
+
+### 项目总进度
+
+| 模块 | 状态 | 提交 |
+|------|------|------|
+| M1 项目搭建 | ✅ 完成 | e9c5464 |
+| M2 解析器移植 | ✅ 完成 | 多次提交 |
+| M3 状态+文件 | ✅ 完成 | 多次提交 |
+| M4 标注编辑器 (10 Phase) | ✅ 完成 | 8abb46a → 89b25a5 |
+| M5 Schema Editor | ✅ 完成 | 0ac5eb2 |
+| M6 功能 Tab (5 Phase) | ✅ 完成 | 5c31721 → 845e9d4 |
+| M7 Electron 打包 | ⏸ 待开始 | |
+| M8 联调修 bug | ⏸ 待开始 | |
+
+**下一步**：M7 Electron 桌面打包 或 M8 联调修 bug
+
 *最后更新: 2026-02-19*

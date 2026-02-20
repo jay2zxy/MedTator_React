@@ -1234,3 +1234,106 @@ return {
 **验证**: 编译零错误，21 测试通过，浏览器功能正常
 
 ---
+
+## Session 6.1 — M6 Phase 1-3: Statistics + Export + Converter (2026-02-19)
+
+**提交**: 5c31721, e2a4f90, 8f8f49e
+
+### Phase 1: Statistics Tab (5c31721)
+
+- `components/Statistics.tsx` 重写：对照原版 `app_hotpot_ext_statistics.js` (118行)
+- 从全局 store 读取 dtd + anns，计算语料库统计
+- 显示：文件数、总 tag 数、各 tag 类型数量、每文件 tag 分布
+
+### Phase 2: Export Tab (e2a4f90)
+
+- `components/Export.tsx` 重写：对照原版 `app_hotpot_ext_exporter.js` (75行)
+- 支持导出格式：XML(原格式)、BioC XML、JSON、CSV
+- 批量导出为 ZIP（使用 JSZip）
+
+### Phase 3: Converter Tab (8f8f49e)
+
+- `components/Converter.tsx` 重写：对照原版 `app_hotpot_ext_converter.js` (418行)
+- Raw Text → XML 转换（拖拽 .txt 文件 + 选择 DTD）
+- MedTagger → XML 转换（.txt + .ann 文件配对）
+- 转换结果预览 + 批量下载 ZIP
+
+---
+
+## Session 6.2 — M6 Phase 4: Adjudication/IAA Tab (2026-02-19, Opus)
+
+**提交**: c369b98
+
+### 新增文件
+
+- **`utils/iaa-calculator.ts`** (~650行)：IAA 计算引擎，移植自 `iaa_calculator.js` (1966行)
+  - 类型：IaaDict, GsDict, GsAnnEntry, GsTagObj, AnnRst, TagResult, Cm, CmTags, CohenKappa
+  - 文档匹配：`hash(ann.text)` MurmurHash 文本哈希配对
+  - Tag 匹配：overlap（Jaccard 字符级）/ exact（精确 spans）
+  - 混淆矩阵：TP(双方一致) / FP(仅A) / FN(仅B)，存储 `[tag_a, tag_b]` 对
+  - 指标：F1/Precision/Recall + Cohen's Kappa（含 95% CI、边际概率）
+  - Gold Standard：初始化默认值（TP 接受 A 版本）、accept/reject
+  - 报告：5 个 sheet（Summary/CohenKappa/Files/Tags/Adjudication）
+
+- **`components/Adjudication.tsx`** (~846行)：完整 IAA UI
+  - Ribbon：ClearAll、A/B Dropzone、Overlap%、Attributes 开关、Calculate、Report、Download
+  - F1 Score 面板：左侧汇总条(220px) + 中间文件列表 + 右侧 tag 详情（accept/reject 裁决）
+  - Cohen's Kappa 面板：指标汇总 + 混淆矩阵（旋转表头 + 边际概率行列）
+  - 子组件：RibbonBtn, TG, IaaDropzone, IaaTagInfo, IaaTagInfoGs, F1Bar
+  - 导出：All Tags A&B ZIP、Gold Standard ZIP、Excel Report (xlsx)
+
+### Bug 修复
+
+- **`evaluateAnnOnDtd` 崩溃**（`Cannot read properties of undefined (reading 'tp')`）：
+  - 原因：`getCohenKappaOverall(result)` 调用时 `result.all` 仍为 `{} as TagResult`，`.cm` 未定义
+  - 修复：`result.all = allResult` 移到 `getCohenKappaOverall()` 调用之前
+- **`import XLSX from 'xlsx'`**：xlsx 无 default export → `import * as XLSX from 'xlsx'`
+- **calculate 无 try-catch**：添加 try-catch + `message.error()` 显示错误
+
+### 验证
+
+- ✅ 编译零错误，21 测试通过
+- ✅ 浏览器：F1 Score (OVERALL 0.8571) + Cohen's Kappa (0.6667) + 混淆矩阵正确
+
+---
+
+## Session 6.3 — M6 Phase 5: Remove Error Analysis + Toolkit (2026-02-19)
+
+**提交**: 845e9d4
+
+### 删除 Error Analysis Tab
+
+- 删除 `components/ErrorAnalysis.tsx`
+- 从 `App.tsx`、`RibbonMenu.tsx`、`store.ts` (TabKey) 中移除所有引用
+- 用户决定不需要此功能
+
+### 新增/修改
+
+- **`components/Toolkit.tsx`** (~270行)：MedTaggerVis 可视化工具
+  - Ribbon：MedTaggerVis 按钮、Clear All、Show Certainty/Status 开关、Help
+  - 三列布局：Raw .txt Files | Output .ann Files | Visualization
+  - 拖拽加载 .txt 和 .ann 文件
+  - 点击 .ann → 自动匹配同名 .txt（`doc.txt.ann` → `doc.txt`）→ 渲染高亮
+  - 实体颜色 + type 标签 + Certainty/Status 属性 glyph（➕➖❓等）
+  - 自实现渲染（非 BRAT 库）：解析 medtagger2brat 结果 → 构建 segments → React 渲染
+
+- **`parsers/brat-parser.ts`** (+25行)：
+  - 导出 `MedTaggerRecord` 接口（原为 internal）
+  - 新增 `parseMedTaggerAnn(text)`: 解析 MedTagger `.ann` 格式（tab 分隔 + key="value" 对）
+  - 新增 `parseMedTaggerLine(line)`: 解析单行
+
+### 验证
+
+- ✅ 编译零错误，21 测试通过
+
+---
+
+## M6 进度（全部完成）
+
+- [x] Phase 1: Statistics Tab ✅ (5c31721)
+- [x] Phase 2: Export Tab ✅ (e2a4f90)
+- [x] Phase 3: Converter Tab ✅ (8f8f49e)
+- [x] Phase 4: Adjudication/IAA Tab ✅ (c369b98)
+- [x] Phase 5: Remove Error Analysis + Toolkit (MedTaggerVis) ✅ (845e9d4)
+
+---
