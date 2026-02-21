@@ -1337,3 +1337,96 @@ return {
 - [x] Phase 5: Remove Error Analysis + Toolkit (MedTaggerVis) ✅ (845e9d4)
 
 ---
+
+## Session 7.1 — M7: LLM 自动标注 (2026-02-20, Opus 4.6)
+
+**分支**: jay-dev
+**状态**: 完成，待提交
+
+### 完成的工作
+
+**1. 新建 `utils/ollama-client.ts` (~90行)**
+- `OllamaConfig` 接口（baseUrl + model），默认 `localhost:11434` + `mistral:latest`
+- `checkOllamaStatus(config)` — GET `/api/tags` 检查连接
+- `listModels(config)` — GET `/api/tags` 返回模型名列表
+- `requestAutoAnnotation(config, text, etagNames)` — POST `/api/chat`
+  - system prompt: "text annotation assistant"
+  - user prompt: 文本 + etag 列表 + JSON 格式说明
+  - `stream: false, format: 'json'`
+  - 解析 `response.message.content` → `{keyword, tag}[]`
+  - 容错：支持 `annotations` 或 `results` 字段，过滤无效条目
+
+**2. 新建 `utils/auto-annotate.ts` (~70行)**
+- `llmAnnotationsToTags(llmResult, ann, dtd)` — LLM 输出 → AnnTag 转换
+  - 遍历 `{keyword, tag}`：验证 tag 在 dtd 中存在且是 etag
+  - `getLocs(keyword, ann.text)` — 正则匹配所有精确位置（`\b...\b`）
+  - 重叠检测：与已有 + 新创建的 tag spans 比较，跳过重叠
+  - `makeEtag()` 创建标注（自动 ID + 默认属性）
+  - 临时 push 到 `ann.tags` 以确保 ID 自增正确，最后撤回
+- `spansOverlap(a, b)` — 两个 `[start, end]` 是否有交集
+- `getExistingSpans(ann, dtd)` — 收集所有已有 etag 的 span 范围
+
+**3. 修改 `store.ts` (+25行)**
+- 新增状态：`ollamaConfig: OllamaConfig`、`isAutoAnnotating: boolean`
+- 新增 actions：
+  - `setOllamaConfig(config)` — 部分更新配置
+  - `autoAnnotate()` — 完整流程：获取当前 ann+dtd → requestAutoAnnotation → llmAnnotationsToTags → 逐个 push tag → 触发重渲染
+
+**4. 修改 `components/Annotation.tsx` (+60行)**
+- 工具栏新增 "Auto-Annotate (LLM)" 分组：
+  - **Annotate 按钮**：禁用条件（无 dtd / 无文件 / 运行中），运行时显示 Spin
+  - **Settings 齿轮按钮**：打开 Ollama 配置弹窗
+- **Settings Modal**：
+  - Ollama URL 输入框（默认 `http://localhost:11434`）
+  - Model 下拉框（从 `listModels()` 动态获取）
+  - Test Connection 按钮（显示 ✓ / ✗ 状态）
+
+### 核心设计：为什么不信任 LLM 的 span
+
+LLM 返回的字符偏移量通常不准确（±几个字符），直接用会导致标注位置错乱。
+**解决方案**：LLM 只负责识别关键词和分类，span 定位交给 `getLocs()` 的正则匹配。
+
+```
+LLM: "headache" → SYMPTOM    (只给关键词 + 标签)
+getLocs("headache", text)     (正则 \bheadache\b 精确匹配)
+  → [[23,31], [89,97]]       (所有出现位置，精确到字符)
+```
+
+### 数据流
+
+```
+用户点击 "Annotate"
+  ↓
+store.autoAnnotate()
+  ↓
+requestAutoAnnotation(config, ann.text, ["SYMPTOM", "MEDICATION", "DISEASE"])
+  → POST http://localhost:11434/api/chat (mistral, format: json)
+  → LLM: {"annotations": [{"keyword": "headache", "tag": "SYMPTOM"}, ...]}
+  ↓
+llmAnnotationsToTags(llmResult, ann, dtd)
+  → "headache": getLocs() → [[23,31]] → 无重叠 → makeEtag({spans:"23~31", text:"headache"})
+  → "aspirin": getLocs() → [[50,57]] → 无重叠 → makeEtag({spans:"50~57", text:"aspirin"})
+  ↓
+逐个 push tag → set({anns: [...anns]})
+  ↓
+CM6 useEffect → dispatch setTagDecorations → 彩色高亮
+AnnotationTable → 新标注出现在表格
+message.success("Auto-annotated: 5 new tags added")
+```
+
+### 文件变更
+
+| 文件 | 操作 | 行数 |
+|------|------|------|
+| `utils/ollama-client.ts` | 新增 | ~90 |
+| `utils/auto-annotate.ts` | 新增 | ~70 |
+| `store.ts` | 修改 | +25 |
+| `components/Annotation.tsx` | 修改 | +60 |
+
+### 验证
+
+- ✅ `npm run build` 零错误
+- ✅ `npm test` 21 测试全部通过
+- ✅ 浏览器测试（用户确认）：Settings 弹窗 + Annotate 按钮功能正常
+
+---

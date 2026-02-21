@@ -4,6 +4,9 @@ import { getNextTagId, anns2hintDict, addTagToHintDict } from './parsers/ann-par
 import { mkBaseDtd } from './parsers/dtd-parser'
 import type { HintDict } from './parsers/ann-parser'
 import { makeEtag } from './utils/tag-helper'
+import type { OllamaConfig } from './utils/ollama-client'
+import { DEFAULT_OLLAMA_CONFIG, requestAutoAnnotation } from './utils/ollama-client'
+import { llmAnnotationsToTags } from './utils/auto-annotate'
 
 // ── Exported Types ──
 
@@ -118,6 +121,12 @@ interface AppState {
   openSchemaEditorLoad: (dtd: Dtd) => void
   closeSchemaEditor: () => void
   setSeDtd: (dtd: Dtd) => void
+
+  // ─ LLM Auto-Annotate ─
+  ollamaConfig: OllamaConfig
+  isAutoAnnotating: boolean
+  setOllamaConfig: (config: Partial<OllamaConfig>) => void
+  autoAnnotate: () => Promise<number>
 }
 
 // ── Store ──
@@ -447,4 +456,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   openSchemaEditorLoad: (dtd) => set({ seDtd: dtd, seOpen: true }),
   closeSchemaEditor: () => set({ seOpen: false }),
   setSeDtd: (dtd) => set({ seDtd: dtd }),
+
+  // ─ LLM Auto-Annotate ─
+  ollamaConfig: { ...DEFAULT_OLLAMA_CONFIG },
+  isAutoAnnotating: false,
+  setOllamaConfig: (config) => set((s) => ({ ollamaConfig: { ...s.ollamaConfig, ...config } })),
+  autoAnnotate: async () => {
+    const { anns, annIdx, dtd } = get()
+    if (annIdx === null || !dtd) return 0
+
+    set({ isAutoAnnotating: true })
+    try {
+      const ann = anns[annIdx]
+      const etagNames = dtd.etags.map((t) => t.name)
+      const llmResult = await requestAutoAnnotation(get().ollamaConfig, ann.text, etagNames)
+      const newTags = llmAnnotationsToTags(llmResult, ann, dtd)
+
+      for (const tag of newTags) {
+        ann.tags.push(tag)
+      }
+      if (newTags.length > 0) ann._has_saved = false
+
+      set({ anns: [...anns] })
+      return newTags.length
+    } finally {
+      set({ isAutoAnnotating: false })
+    }
+  },
 }))

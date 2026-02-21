@@ -495,6 +495,31 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 
 ---
 
+### 2026-02-20 - Session 7.1 M7: LLM 自动标注 (Ollama)
+
+**模型**: Opus 4.6
+
+**新增文件**：
+- ✅ `utils/ollama-client.ts` (~90行)：Ollama REST API 封装
+  - `checkOllamaStatus` / `listModels` / `requestAutoAnnotation`
+  - POST `/api/chat`（stream:false, format:json），prompt 设计：关键词+标签分类
+- ✅ `utils/auto-annotate.ts` (~70行)：LLM 输出 → AnnTag 转换
+  - `getLocs()` 正则匹配精确 span（不信任 LLM 的偏移量）
+  - 重叠检测：跳过与已有标注重叠的位置
+
+**修改文件**：
+- ✅ `store.ts` (+25行)：`ollamaConfig` + `isAutoAnnotating` 状态 + `autoAnnotate()` action
+- ✅ `Annotation.tsx` (+60行)：工具栏 "Auto-Annotate (LLM)" 分组 + Settings Modal
+
+**核心设计**：LLM 只返回 `{keyword, tag}`，span 定位交给 `getLocs()` 正则匹配
+```
+LLM: "headache" → SYMPTOM → getLocs("headache", text) → [[23,31]] → makeEtag()
+```
+
+**验证**：编译零错误，21 测试通过，浏览器功能正常
+
+---
+
 ### 项目总进度
 
 | 模块 | 状态 | 提交 |
@@ -505,9 +530,10 @@ useEffect 触发 → CM6 彩色高亮 + 表格滚动到底部
 | M4 标注编辑器 (10 Phase) | ✅ 完成 | 8abb46a → 89b25a5 |
 | M5 Schema Editor | ✅ 完成 | 0ac5eb2 |
 | M6 功能 Tab (5 Phase) | ✅ 完成 | 5c31721 → 845e9d4 |
-| M7 Electron 打包 | ⏸ 待开始 | |
-| M8 联调修 bug | ⏸ 待开始 | |
+| M7 LLM 自动标注 | ✅ 完成 | 待提交 |
+| M8 Electron 打包 | ⏸ 待开始 | |
+| M9 联调修 bug | ⏸ 待开始 | |
 
-**下一步**：M7 Electron 桌面打包 或 M8 联调修 bug
+**下一步**：M8 Electron 桌面打包 或 M9 联调修 bug
 
-*最后更新: 2026-02-19*
+*最后更新: 2026-02-20*
