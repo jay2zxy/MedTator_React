@@ -34,7 +34,7 @@
 
 ---
 
-### 🚧 项目重构（M1-M6 ✅，M7-M8 待开始）
+### 🚧 项目重构（M1-M6 ✅，M7 LLM 进行中，M8-M9 待开始）
 
 **实际目录结构**（原版代码保持不动，React 版在 MedTator-React/ 下开发）：
 
@@ -179,6 +179,8 @@ MedTator-React/src/
     ├── tag-helper.ts        # makeEtag/makeRtag + 快捷键分配
     ├── nlp-toolkit.ts       # 分句器 + 偏移映射
     ├── iaa-calculator.ts    # IAA 计算引擎（F1/Kappa/GS）
+    ├── ollama-client.ts     # Ollama REST API 封装（M7 新增）
+    ├── auto-annotate.ts     # LLM→AnnTag 转换（M7 新增）
     └── __tests__/           # 9 个测试
 ```
 
@@ -247,12 +249,30 @@ MedTator-React/src/
 - [x] Phase 4: Adjudication/IAA（F1/Kappa + 裁决 + Report）✅ (c369b98)
 - [x] Phase 5: Toolkit (MedTaggerVis) + 移除 Error Analysis ✅ (845e9d4)
 
-#### M7-Electron打包 (2天)
+#### M7-LLM 自动标注 (1天) - 🚧 进行中
+- [ ] Step 1: `utils/ollama-client.ts` — Ollama REST API 封装（检查连接/列出模型/请求标注）
+- [ ] Step 2: `utils/auto-annotate.ts` — LLM 输出 → AnnTag 转换（getLocs 正则匹配精确 span + 重叠检测）
+- [ ] Step 3: `store.ts` 扩展 — ollamaConfig + isAutoAnnotating 状态 + autoAnnotate() action
+- [ ] Step 4: `Annotation.tsx` 工具栏 — Auto-Annotate 按钮 + Settings 弹窗（URL/模型/测试连接）
+
+**核心思路**：LLM 只返回 `{keyword, tag}` 对，用已有的 `getLocs()` 正则匹配获取精确 span，避免 LLM span 不准的问题。
+
+**数据流**：
+```
+点击 Auto-Annotate → requestAutoAnnotation(config, text, etags)
+  → Ollama POST /api/chat → LLM 返回 [{keyword, tag}, ...]
+  → llmAnnotationsToTags(): keyword → getLocs() → 精确 span → makeEtag()
+  → 逐个 addTag() → CM6 重渲染
+```
+
+**依赖**：仅需本地 Ollama 服务（`ollama serve`），无外部 API 依赖。浏览器 fetch 即可调用，无需 Electron。
+
+#### M8-Electron打包 (2天)
 - [ ] 主进程 + 预加载脚本
 - [ ] 文件系统权限
 - [ ] 打包成 .exe / .dmg
 
-#### M8-联调修bug (3天)
+#### M9-联调修bug (3天)
 - [ ] 功能对齐检查
 - [ ] 修bug
 
@@ -264,9 +284,10 @@ MedTator-React/src/
 **Week 2 (2/12-13)**: M3 状态+文件 + M4 标注编辑器 Phase 1-4 ✅
 **Week 3 (2/17-18)**: M4 Phase 5-10 ✅
 **Week 4 (2/19)**: M5 Schema Editor + M6 全部 5 Phase ✅
-**Week 5+**: M7 Electron打包 + M8 联调修bug
+**Week 5 (2/20)**: M7 LLM 自动标注 🚧
+**Week 5+**: M8 Electron打包 + M9 联调修bug
 
-**实际进度**: 4 周完成 M1-M6（比计划快），剩余 M7+M8
+**实际进度**: 4 周完成 M1-M6（比计划快），M7 新增功能进行中
 
 ---
 
