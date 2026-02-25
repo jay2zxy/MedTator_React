@@ -520,6 +520,55 @@ LLM: "headache" → SYMPTOM → getLocs("headache", text) → [[23,31]] → make
 
 ---
 
+### 2026-02-25 - Session 7.2 M7 改进：否定检测 + getLocs 鲁棒性
+
+**问题**：mistral/deepseek 实测发现多空格不匹配、否定语境误标注、JSON 解析失败
+
+**改动**：
+- ✅ `getLocs`：特殊字符转义 + 空格 → `\s+`（`"blood pressure"` 匹配 `"blood  pressure"`）
+- ✅ `isNegatedByContext`：双向窗口否定检测
+  - 前向 60 字符：`denies/no /doesn't/negative for...`，句号/转折词截断
+  - 后向 30 字符：`absent/not found/: none...`（处理 `"Fever: absent"` 后置否定）
+- ✅ `ollama-client`：JSON 解析前剥 markdown 代码块（deepseek 习惯包裹输出）
+- ✅ Prompt：`ONLY use these exact tag names: ${tagList}`（防止模型用 DISORDER 代替 DISEASE）
+- ✅ 测试：27 → 45 个
+
+**调试过程中踩的坑**：
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| `chest pain` 否定未过滤 | mistral 没识别 "denies" | 加客户端前向窗口 |
+| `nausea` 被误杀 | 跨句，"doesn't" 在 60 字符窗口内 | 句号加入 scope breaker |
+| deepseek JSON 解析失败 | 输出包 markdown 代码块 | strip ` ```json ``` ` |
+| `hypertension` 未标注 | 模型用 "DISORDER" 不在 DTD 里 | Prompt 重复强调 tag 列表 |
+| mistral 输出不稳定 | temperature=0.8 有随机性 | 待加 `temperature: 0` |
+
+**学到的**：
+LLM 工程
+  - LLM 输出不可靠，不能信任它的 span 偏移，只用 keyword+tag 再客户端定位
+  - 小模型（mistral 4GB）在结构化输出上不稳定，temperature 影响可重复性
+  - 不同模型对 format: 'json' 遵守程度不同（deepseek 会加 markdown 包裹）
+  - Prompt 工程：同一条规则说一遍不够，关键约束要重复、具体（tag 列表在 Rules 里再列一次）
+
+  NLP / 否定检测
+  - NegEx 算法的核心思想：用滑动窗口查否定词，用 scope breaker 截断作用域
+  - 前置否定（denies X）vs 后置否定（X: absent）需要分别处理
+  - sentence boundary 比 "but" 这类词更强的 scope breaker
+  - 简化版 NegEx 的边界：复杂嵌套从句（依存句法树才能解决）
+
+  算法
+  - Two-Way 字符串匹配：O(n) 时间 + O(1) 空间，比 KMP 空间更优
+  - \b 的局限性：对非单词字符边界不起作用
+  - 多义词问题（同词出现两次）：工程上接受假阳性比漏标更好处理
+
+  测试驱动
+  - 先用真实模型跑，发现问题后再写单元测试固化 fix
+  - 调试 console.log → 确认 raw response → 定位根因 → 修复 → 删 log 的流程
+
+**提交**：c96d8b0
+
+---
+
 ### 项目总进度
 
 | 模块 | 状态 | 提交 |

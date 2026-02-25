@@ -1,7 +1,8 @@
 # MedTator 重构项目
 
 
-**文档**：CLAUDE.md（精简版，给AI看）| log.detail.md（完整会话记录）| log.md（给人看）| reload.md（架构/运行指南）
+**文档**：CLAUDE.md（精简版，给AI看）| log.md（给人看）| reload.md（架构/运行指南）
+**注意**：log.detail.md 仅供人工查阅，AI 不需要读取，除非用户明确要求。
 
 ---
 
