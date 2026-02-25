@@ -50,7 +50,8 @@ Return a JSON object with this exact format:
 
 Rules:
 - Each keyword must appear EXACTLY as written in the text (case-sensitive match)
-- Only use tag names from the provided list
+- ONLY use these exact tag names: ${tagList}
+- Do not invent or substitute other tag names
 - Find ALL relevant mentions, including duplicates at different positions
 - Keep keywords short (1-4 words typically)`
 
@@ -75,12 +76,23 @@ Rules:
 
   const data = await resp.json()
   const content = data.message?.content || ''
+  console.log('[LLM raw response]', content) 
+  
+  // Some models wrap JSON in markdown code fences — strip them before parsing
+  const stripped = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 
   let parsed: any
   try {
-    parsed = JSON.parse(content)
+    parsed = JSON.parse(stripped)
   } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${content.slice(0, 200)}`)
+    // Fallback: extract the first {...} block from the response
+    const match = stripped.match(/\{[\s\S]*\}/)
+    if (match) {
+      try { parsed = JSON.parse(match[0]) } catch { /* fall through */ }
+    }
+    if (!parsed) {
+      throw new Error(`Failed to parse LLM response as JSON: ${content.slice(0, 200)}`)
+    }
   }
 
   const annotations: LlmAnnotation[] = parsed.annotations || parsed.results || []

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<MEDICAL_SYMPTOMS>
+<TEXT><![CDATA[Patient reports severe headache and dizziness after taking ibuprofen for arthritis.]]></TEXT>
+<TAGS>
+<SYMPTOM id="S0" spans="24~32" text="headache" />
+<DISEASE id="D0" spans="75~84" text="arthritis" />
+<MEDICATION id="M0" spans="61~70" text="ibuprofen" />
+</TAGS>
+</MEDICAL_SYMPTOMS>

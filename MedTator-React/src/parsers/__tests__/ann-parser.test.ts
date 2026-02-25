@@ -41,6 +41,26 @@ describe('ann-parser', () => {
     expect(locs).toEqual([[4, 8], [18, 22]])
   })
 
+  it('getLocs matches keyword with one space against text with multiple spaces', () => {
+    // LLM returns "blood pressure" (1 space), text has "blood  pressure" (2 spaces)
+    const locs = getLocs('blood pressure', 'Patient has blood  pressure issues.')
+    expect(locs).toHaveLength(1)
+    expect(locs[0][0]).toBe(12)
+    expect(locs[0][1]).toBe(27) // end of "pressure" in original text
+  })
+
+  it('getLocs matches keyword with multiple spaces against text with one space', () => {
+    // LLM returns "blood  pressure" (2 spaces), text has "blood pressure" (1 space)
+    const locs = getLocs('blood  pressure', 'Patient has blood pressure issues.')
+    expect(locs).toHaveLength(1)
+    expect(locs[0][0]).toBe(12)
+    expect(locs[0][1]).toBe(26)
+  })
+
+  it('getLocs does not throw on special regex chars in keyword', () => {
+    expect(() => getLocs('B.P. (check)', 'Patient B.P. (check) was normal.')).not.toThrow()
+  })
+
   it('xml2ann parses entities, relations, and meta', () => {
     const dtd = parseDtd(DTD_TEXT)
     const ann = xml2ann(XML, dtd)
