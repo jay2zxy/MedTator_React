@@ -460,13 +460,16 @@ export function getTextBySpans(spans: string, fullText: string): string {
 
 export function getLocs(str: string, text: string): number[][] {
   try {
-    const regex = new RegExp('\\b' + str + '\\b', 'gmi')
+    // Escape special regex chars, then normalize whitespace sequences to \s+
+    const escaped = str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const normalized = escaped.replace(/ +/g, '\\s+')
+    const regex = new RegExp('\\b' + normalized + '\\b', 'gmi')
     const locs: number[][] = []
     let m: RegExpExecArray | null
 
     while ((m = regex.exec(text)) !== null) {
       if (m.index === regex.lastIndex) regex.lastIndex++
-      locs.push([m.index, regex.lastIndex])
+      locs.push([m.index, m.index + m[0].length])
     }
 
     return locs
