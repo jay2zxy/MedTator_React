@@ -32,9 +32,12 @@ export interface LlmAnnotation {
 export async function requestAutoAnnotation(
   config: OllamaConfig,
   text: string,
-  etagNames: string[]
+  etags: Array<{ name: string; description?: string }>
 ): Promise<LlmAnnotation[]> {
-  const tagList = etagNames.join(', ')
+  const tagList = etags.map(t => t.name).join(', ')
+  const tagLines = etags.map(t =>
+    t.description ? `  - ${t.name}: ${t.description}` : `  - ${t.name}`
+  ).join('\n')
 
   const systemPrompt = `You are a text annotation assistant. Given a text and a list of entity tag types, identify all relevant keywords/phrases in the text and classify each one with the appropriate tag type. Return ONLY valid JSON.`
 
@@ -43,17 +46,21 @@ export async function requestAutoAnnotation(
 ${text}
 """
 
-Entity tags: ${tagList}
+Entity tags:
+${tagLines}
 
 Return a JSON object with this exact format:
 {"annotations": [{"keyword": "exact phrase from text", "tag": "TAG_NAME"}, ...]}
 
 Rules:
-- Each keyword must appear EXACTLY as written in the text (case-sensitive match)
+- keyword must be the shortest core clinical term (1-3 words), NOT a full sentence or clause
+- keyword must appear verbatim in the text (exact spelling, case-insensitive)
 - ONLY use these exact tag names: ${tagList}
 - Do not invent or substitute other tag names
-- Find ALL relevant mentions, including duplicates at different positions
-- Keep keywords short (1-4 words typically)`
+- Find ALL relevant mentions, including duplicates at different positions`
+
+  console.log('[LLM prompt] tags:', etags.map(t => t.description ? `${t.name}: ${t.description}` : t.name))
+  console.log('[LLM prompt] user prompt:\n', userPrompt)
 
   const resp = await fetch(`${config.baseUrl}/api/chat`, {
     method: 'POST',
@@ -62,6 +69,7 @@ Rules:
       model: config.model,
       stream: false,
       format: 'json',
+      options: { temperature: 0 },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },

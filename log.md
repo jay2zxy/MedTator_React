@@ -585,4 +585,32 @@ LLM 工程
 
 **下一步**：M8 Electron 桌面打包 或 M9 联调修 bug
 
-*最后更新: 2026-02-20*
+---
+
+### 2026-02-26 - Session 7.3 M7 改进：Tag Description + LLM Pipeline 对齐
+
+**背景**：量化实验（eval_llm.py）显示，给每个 tag 附描述后 Recall 从 0.27 → 0.77，但生产代码只传 tag 名称。
+
+**改动（6 个文件）**：
+
+- ✅ `types.ts`：`DtdTag` 添加 `description?: string` 字段
+- ✅ `dtd-parser.ts`：`parseTmpDtd` etag/rtag 循环里读取 description；`minimizeDtdJson` 无需改动（不主动删除该字段，自动保留）
+- ✅ `SchemaEditor.tsx`：
+  - TagRow 重新设计：description 从左侧窄列移除，改为 **全宽 LLM HINT 底栏**（有内容时蓝色标签+浅蓝背景，空时灰色淡化）
+  - `destroyOnClose` → `destroyOnHidden`（Ant Design 废弃警告修复）
+  - `handleUse` 移除 `clearAnns()` 和确认对话框（点 Use 不再清空已加载的 XML 文件）
+- ✅ `ollama-client.ts`：
+  - 签名 `etagNames: string[]` → `etags: Array<{name, description?}>`
+  - Prompt `Entity tags:` 展开为多行 `- TagName: description`
+  - 新增 `options: { temperature: 0 }`（与量化实验对齐，保证可重复性）
+  - 新增调试 `console.log('[LLM prompt] tags:')` + `'[LLM prompt] user prompt:'`
+- ✅ `store.ts`：`autoAnnotate` 传 `{name, description}` 对象数组
+- ✅ `auto-annotate.ts`：新增 `getSpanFromTag` + `hasSameTagOverlap` 同 tag dedup
+
+**与量化实验的剩余差异**（影响极小，暂不处理）：
+- Prompt 标签措辞：实验用 `Tag definitions:`，生产用 `Entity tags:`
+- Dedup 顺序：实验先全部收集→按 start 排序→去重；生产逐 keyword 边处理边去重
+
+**验证**：编译零错误，45 个测试全部通过
+
+*最后更新: 2026-02-26*
