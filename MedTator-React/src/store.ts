@@ -468,8 +468,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isAutoAnnotating: true })
     try {
       const ann = anns[annIdx]
-      const etagNames = dtd.etags.map((t) => t.name)
-      const llmResult = await requestAutoAnnotation(get().ollamaConfig, ann.text, etagNames)
+      const etags = dtd.etags.map((t) => ({ name: t.name, description: t.description }))
+      const llmResult = await requestAutoAnnotation(get().ollamaConfig, ann.text, etags)
       const newTags = llmAnnotationsToTags(llmResult, ann, dtd)
 
       for (const tag of newTags) {

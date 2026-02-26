@@ -20,7 +20,7 @@
 
 ---
 
-## 项目状态（截至 2026-02-25）
+## 项目状态（截至 2026-02-26）
 
 | 模块 | 状态 | 提交 |
 |------|------|------|
@@ -30,7 +30,7 @@
 | M4 标注编辑器（10 Phase） | ✅ | 8abb46a→89b25a5 |
 | M5 Schema Editor | ✅ | 0ac5eb2 |
 | M6 其他 Tab（Statistics/Export/Converter/IAA/Toolkit） | ✅ | 5c31721→845e9d4 |
-| M7 LLM 自动标注（Ollama） | ✅ | 8f37861→待提交 |
+| M7 LLM 自动标注（Ollama） | ✅ | 8f37861→c96d8b0→待提交 |
 | M8 Electron 打包 | ⏸ 待开始 | |
 | M9 联调修 bug | ⏸ 待开始 | |
 
@@ -113,8 +113,9 @@ startLinking(rtagDef, firstEntityId) → isLinking=true
 ### LLM 自动标注（M7 + 改进）
 - **不信任 LLM 的 span 偏移**，只用 `{keyword, tag}` 对
 - `getLocs(keyword, text)`：转义正则特殊字符，空格 → `\s+`（匹配多空格文本）
-- 重叠检测：跳过与已有/新建 tags 重叠的位置
-- Prompt：`format: 'json'`，Rules 里重复 tag 列表（`ONLY use these exact tag names: ${tagList}`）
+- 重叠检测：跳过与已有/新建 tags 重叠的位置；同 tag dedup（`hasSameTagOverlap`）
+- Prompt：`format: 'json'`，`temperature: 0`，Rules 里重复 tag 列表
+- **Tag description**（LLM HINT）：`DtdTag.description?` 字段，Schema Editor 底部全宽输入栏，JSON schema 保存/加载，传入 `requestAutoAnnotation(etags: {name, description?}[])`，prompt 里展开为 `- TagName: description`
 - JSON 解析：先剥 markdown 代码块（` ```json ``` `），再 fallback 到 `/{[\s\S]*}/` 抠取
 - **否定检测**（`isNegatedByContext`，双向窗口）：
   - 前向 60 字符：查 `denies/no /doesn't/negative for...`，遇句号/转折词截断

@@ -1501,3 +1501,152 @@ message.success("Auto-annotated: 5 new tags added")
 | `test-llm-edge-cases.xml` | 新增：edge case 测试文件 |
 
 ---
+
+## Session 7.3
+
+**时间**: 2026-02-26
+**模型**: Claude Sonnet 4.6
+**主要目标**: Tag Description 字段 + LLM Pipeline 对齐量化实验
+
+### 背景
+
+量化实验（`eval_llm.py`）证明：prompt 里带 tag description 时 Recall 从 0.27 → 0.77。但生产代码只传 tag 名称。目标是让用户在 Schema Editor 里填写描述，保存进 schema 文件，LLM prompt 自动附上。
+
+### 完成的工作
+
+#### 1. DtdTag 添加 description 字段
+
+**`types.ts`**：
+```typescript
+export interface DtdTag {
+  name: string
+  description?: string   // ← 新增
+  type: 'etag' | 'rtag'
+  ...
+}
+```
+
+#### 2. dtd-parser.ts：读取 + 保留 description
+
+`parseTmpDtd` 的 etag/rtag 循环，tag 构建后各加一行：
+```typescript
+if (tmpTag.description) tag.description = tmpTag.description
+```
+
+`minimizeDtdJson`（JSON/YAML 序列化）无需改动——它只主动删除 `attr_dict/shortcut/style/type/id_prefix`，不删 `description`，因此 JSON.parse(JSON.stringify(...)) 会自动保留。
+
+#### 3. SchemaEditor.tsx：UI 重新设计
+
+**问题**：最初把 description 放在左侧窄列（TAG NAME 下方），视觉上被小号灰色 placeholder 淹没，不易发现。
+
+**方案**：移出左列，改为 **全宽 LLM HINT 底栏**，跨整个 tag 卡片宽度。
+
+布局变化：
+```
+旧（flexbox 横排）：
+  [左列: TAG NAME + DESCRIPTION + ANN.TYPE] | [属性列...]
+
+新（flexbox 纵列）：
+  ┌──────────────────────────────────────────────────────────┐
+  │ [左列: TAG NAME + ANN.TYPE + +Attr] | [属性列...]        │
+  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+  │ LLM HINT  [___________全宽 Input___________________]     │
+  └──────────────────────────────────────────────────────────┘
+```
+
+视觉状态：
+- 空：标签灰色（`#ccc`），背景 `#fafafa`，淡化处理
+- 有内容：标签蓝色（`#7c9ef5`），背景 `#f0f4ff`，突出显示
+
+**同步修复两个 bug**：
+- `destroyOnClose` → `destroyOnHidden`（Ant Design 废弃 API 警告）
+- `handleUse` 移除 `clearAnns()` 和确认对话框：用户只是更新 LLM 描述，不应清空已加载的 XML 文件
+
+#### 4. ollama-client.ts：签名 + Prompt + temperature
+
+签名变更：
+```typescript
+// 旧
+requestAutoAnnotation(config, text, etagNames: string[])
+// 新
+requestAutoAnnotation(config, text, etags: Array<{name: string, description?: string}>)
+```
+
+Prompt 变化：
+```typescript
+// 旧
+Entity tags: Fever, Pain, Headache, ...
+
+// 新
+Entity tags:
+  - Fever: fever, high temperature, pyrexia, febrile
+  - Pain: pain, painful, ache, sore, tenderness
+  - Headache
+```
+
+新增 `options: { temperature: 0 }`，与量化实验保持一致，避免随机性。
+
+新增调试日志（开发期保留）：
+```typescript
+console.log('[LLM prompt] tags:', ...)
+console.log('[LLM prompt] user prompt:\n', userPrompt)
+```
+
+#### 5. store.ts：传对象数组
+
+```typescript
+// 旧
+const etagNames = dtd.etags.map((t) => t.name)
+requestAutoAnnotation(..., etagNames)
+
+// 新
+const etags = dtd.etags.map((t) => ({ name: t.name, description: t.description }))
+requestAutoAnnotation(..., etags)
+```
+
+#### 6. auto-annotate.ts：同 tag dedup
+
+新增辅助函数：
+```typescript
+function getSpanFromTag(tag: AnnTag): [number, number] {
+  const parts = tag.spans.split('~')
+  return [parseInt(parts[0]), parseInt(parts[1])]
+}
+```
+
+在 `llmAnnotationsToTags` 的 overlap 检测后补充：
+```typescript
+const hasSameTagOverlap = newTags.some(
+  t => t.tag === tagName && spansOverlap(span, getSpanFromTag(t))
+)
+if (hasSameTagOverlap) continue
+```
+
+### 与量化实验（eval_llm.py）的对比
+
+| 特性 | eval_llm.py | 生产代码 | 差异 |
+|------|-------------|----------|------|
+| Tag descriptions | ✅ 硬编码 | ✅ Schema Editor 可编辑 | — |
+| temperature: 0 | ✅ | ✅ | 本次补齐 |
+| 同 tag dedup | ✅ 先全量收集再排序去重 | ✅ 逐 keyword 边处理边去重 | 顺序略不同，影响极小 |
+| Prompt 标签 | `Tag definitions:` | `Entity tags:` | 措辞差异，无影响 |
+| 否定检测 | ✅ 双向窗口 | ✅ 双向窗口 | 对齐 |
+| JSON fallback | ✅ | ✅ | 对齐 |
+
+### 验证
+
+- ✅ `npm run build` 零错误
+- ✅ `npm test` 45 测试全部通过
+
+### 文件变更
+
+| 文件 | 操作 |
+|------|------|
+| `types.ts` | 修改：DtdTag 添加 `description?` |
+| `parsers/dtd-parser.ts` | 修改：parseTmpDtd 读取 description |
+| `components/SchemaEditor.tsx` | 修改：LLM HINT 全宽底栏、destroyOnHidden、移除 clearAnns |
+| `utils/ollama-client.ts` | 修改：签名/prompt/temperature/调试log |
+| `store.ts` | 修改：传 {name, description} 对象数组 |
+| `utils/auto-annotate.ts` | 修改：getSpanFromTag + hasSameTagOverlap dedup |
+
+---

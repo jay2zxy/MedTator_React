@@ -12,6 +12,7 @@ export interface DtdAttr {
 
 export interface DtdTag {
   name: string
+  description?: string
   type: 'etag' | 'rtag'
   is_non_consuming: boolean
   attrs: DtdAttr[]
