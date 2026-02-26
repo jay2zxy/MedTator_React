@@ -328,6 +328,7 @@ function parseTmpDtd(tmp: any): Dtd | null {
     }
 
     if (tmpTag.is_non_consuming) tag.is_non_consuming = true
+    if (tmpTag.description) tag.description = tmpTag.description
 
     tag.id_prefix = tmpTag.id_prefix ?? getValidIdPrefix(tag.name, dtd)
     dtd.id_prefix_dict[tag.id_prefix] = tag
@@ -348,6 +349,8 @@ function parseTmpDtd(tmp: any): Dtd | null {
       tag.attrs.push(attr)
       tag.attr_dict[attr.name] = attr
     }
+
+    if (tmpTag.description) tag.description = tmpTag.description
 
     tag.id_prefix = tmpTag.id_prefix ?? getValidIdPrefix(tag.name, dtd)
     dtd.id_prefix_dict[tag.id_prefix] = tag

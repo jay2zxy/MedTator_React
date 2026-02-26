@@ -156,64 +156,93 @@ interface TagRowProps {
 function TagRow({ tag, isEtag, onUpdate, onRemove, onAddAttr, onUpdateAttr, onRemoveAttr }: TagRowProps) {
   return (
     <div style={{
-      display: 'flex', border: '1px solid #e0e0e0', borderRadius: 4,
+      display: 'flex', flexDirection: 'column',
+      border: '1px solid #e0e0e0', borderRadius: 4,
       marginBottom: 8, background: '#fff', overflow: 'hidden',
     }}>
-      {/* Left: tag name + ann.type + +Attr */}
-      <div style={{ minWidth: 155, maxWidth: 155, padding: '6px 10px', background: '#f7f7f7', borderRight: '1px solid #e8e8e8' }}>
-        <FieldLabel>TAG NAME</FieldLabel>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-          <Input
-            size="small"
-            value={tag.name}
-            style={{ fontWeight: 700, fontSize: 13, flex: 1, padding: '0 2px' }}
-            variant="borderless"
-            onKeyDown={filterNameKey}
-            onChange={e => onUpdate({ name: e.target.value })}
-          />
-          <button
-            onClick={onRemove}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 16, lineHeight: 1, padding: '0 2px' }}
-            title="Remove tag"
-          >−</button>
+      {/* Top row: left panel + attribute columns */}
+      <div style={{ display: 'flex' }}>
+        {/* Left: tag name + ann.type + +Attr */}
+        <div style={{ minWidth: 155, maxWidth: 155, padding: '6px 10px', background: '#f7f7f7', borderRight: '1px solid #e8e8e8' }}>
+          <FieldLabel>TAG NAME</FieldLabel>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+            <Input
+              size="small"
+              value={tag.name}
+              style={{ fontWeight: 700, fontSize: 13, flex: 1, padding: '0 2px' }}
+              variant="borderless"
+              onKeyDown={filterNameKey}
+              onChange={e => onUpdate({ name: e.target.value })}
+            />
+            <button
+              onClick={onRemove}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+              title="Remove tag"
+            >−</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            {isEtag && (
+              <div>
+                <FieldLabel>ANN.TYPE</FieldLabel>
+                <Select
+                  size="small"
+                  value={tag.is_non_consuming ? 'doc' : 'span'}
+                  style={{ width: 72 }}
+                  onChange={v => onUpdate({ is_non_consuming: v === 'doc' })}
+                  options={[{ value: 'span', label: 'SPAN' }, { value: 'doc', label: 'DOC' }]}
+                />
+              </div>
+            )}
+            <Button
+              type="link" size="small"
+              icon={<PlusOutlined />}
+              onClick={onAddAttr}
+              style={{ padding: 0, fontSize: 12 }}
+            >Attr</Button>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          {isEtag && (
-            <div>
-              <FieldLabel>ANN.TYPE</FieldLabel>
-              <Select
-                size="small"
-                value={tag.is_non_consuming ? 'doc' : 'span'}
-                style={{ width: 72 }}
-                onChange={v => onUpdate({ is_non_consuming: v === 'doc' })}
-                options={[{ value: 'span', label: 'SPAN' }, { value: 'doc', label: 'DOC' }]}
-              />
-            </div>
+
+        {/* Right: attribute columns */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, alignItems: 'flex-start' }}>
+          {tag.attrs.length === 0 && (
+            <div style={{ padding: '20px 16px', color: '#ccc', fontSize: 12 }}>No attributes</div>
           )}
-          <Button
-            type="link" size="small"
-            icon={<PlusOutlined />}
-            onClick={onAddAttr}
-            style={{ padding: 0, fontSize: 12 }}
-          >Attr</Button>
+          {tag.attrs.map((attr, j) => (
+            <AttrColumn
+              key={j}
+              attr={attr}
+              isEtag={isEtag}
+              onUpdate={patch => onUpdateAttr(j, patch)}
+              onRemove={() => onRemoveAttr(j)}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Right: attribute columns */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', flex: 1, alignItems: 'flex-start' }}>
-        {tag.attrs.length === 0 && (
-          <div style={{ padding: '20px 16px', color: '#ccc', fontSize: 12 }}>No attributes</div>
-        )}
-        {tag.attrs.map((attr, j) => (
-          <AttrColumn
-            key={j}
-            attr={attr}
-            isEtag={isEtag}
-            onUpdate={patch => onUpdateAttr(j, patch)}
-            onRemove={() => onRemoveAttr(j)}
+      {/* Bottom: LLM hint bar (etag only) */}
+      {isEtag && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          borderTop: '1px dashed #e0e0e0', padding: '3px 10px',
+          background: tag.description ? '#f0f4ff' : '#fafafa',
+        }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+            color: tag.description ? '#7c9ef5' : '#ccc',
+            whiteSpace: 'nowrap', userSelect: 'none',
+          }}>
+            LLM HINT
+          </span>
+          <Input
+            size="small"
+            variant="borderless"
+            placeholder="keywords for LLM auto-annotation, e.g. muscle pain, swelling, myalgia"
+            value={tag.description || ''}
+            onChange={e => onUpdate({ description: e.target.value || undefined })}
+            style={{ fontSize: 11, color: '#555', flex: 1, padding: '0 2px' }}
           />
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -244,8 +273,6 @@ export default function SchemaEditor() {
   const setSeDtd        = useAppStore(s => s.setSeDtd)
   const closeSchemaEditor = useAppStore(s => s.closeSchemaEditor)
   const setDtd          = useAppStore(s => s.setDtd)
-  const clearAnns       = useAppStore(s => s.clearAnns)
-  const anns            = useAppStore(s => s.anns)
 
   const [downloadFormat, setDownloadFormat] = useState<'yaml' | 'json' | 'dtd'>('yaml')
   const [selectedSample, setSelectedSample] = useState<string | undefined>(undefined)
@@ -281,23 +308,13 @@ export default function SchemaEditor() {
 
   const handleUse = () => {
     if (!seDtd) return
-    const doUse = () => {
-      const full = extendBaseDtd(seDtd)
-      assignTagColors(full)
-      assignTagShortcuts(full)
-      injectTagColors(full)
-      setDtd(full)
-      clearAnns()
-      closeSchemaEditor()
-      message.success(`Schema "${full.name}" applied`)
-    }
-    if (anns.length > 0) {
-      Modal.confirm({
-        title: 'Apply Schema',
-        content: `This will clear ${anns.length} loaded file(s). Continue?`,
-        okText: 'Apply & Clear', okType: 'danger', onOk: doUse,
-      })
-    } else { doUse() }
+    const full = extendBaseDtd(seDtd)
+    assignTagColors(full)
+    assignTagShortcuts(full)
+    injectTagColors(full)
+    setDtd(full)
+    closeSchemaEditor()
+    message.success(`Schema "${full.name}" applied`)
   }
 
   const handleDownload = () => {
@@ -330,7 +347,7 @@ export default function SchemaEditor() {
       footer={null}
       width={1020}
       zIndex={2000}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { padding: '8px 16px', maxHeight: '80vh', overflow: 'auto' } }}
     >
       <input

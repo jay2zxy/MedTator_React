@@ -10,6 +10,12 @@ function spansOverlap(a: [number, number], b: [number, number]): boolean {
   return a[0] < b[1] && b[0] < a[1]
 }
 
+function getSpanFromTag(tag: AnnTag): [number, number] {
+  if (!tag.spans) return [0, 0]
+  const parts = tag.spans.split('~')
+  return [parseInt(parts[0]), parseInt(parts[1])]
+}
+
 /**
  * Get all existing etag span ranges from an annotation
  */
@@ -91,6 +97,12 @@ export function llmAnnotationsToTags(
       // Check overlap with existing + newly created tags
       const hasOverlap = existingSpans.some((ex) => spansOverlap(span, ex))
       if (hasOverlap) continue
+
+      // Dedup: skip if same tag type already created at an overlapping span
+      const hasSameTagOverlap = newTags.some(
+        t => t.tag === tagName && spansOverlap(span, getSpanFromTag(t))
+      )
+      if (hasSameTagOverlap) continue
 
       if (isNegatedByContext(ann.text, start, end)) continue
 
