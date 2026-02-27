@@ -5,7 +5,7 @@ export interface OllamaConfig {
 
 export const DEFAULT_OLLAMA_CONFIG: OllamaConfig = {
   baseUrl: 'http://localhost:11434',
-  model: 'mistral:latest',
+  model: 'qwen3:8b',
 }
 
 export async function checkOllamaStatus(config: OllamaConfig): Promise<boolean> {
@@ -17,11 +17,19 @@ export async function checkOllamaStatus(config: OllamaConfig): Promise<boolean> 
   }
 }
 
-export async function listModels(config: OllamaConfig): Promise<string[]> {
+export interface OllamaModelInfo {
+  name: string
+  isRemote: boolean
+}
+
+export async function listModels(config: OllamaConfig): Promise<OllamaModelInfo[]> {
   const resp = await fetch(`${config.baseUrl}/api/tags`)
   if (!resp.ok) throw new Error(`Ollama API error: ${resp.status}`)
   const data = await resp.json()
-  return (data.models || []).map((m: any) => m.name as string)
+  return (data.models || []).map((m: any) => ({
+    name: m.name as string,
+    isRemote: typeof m.remote_model === 'string' && m.remote_model.length > 0,
+  }))
 }
 
 export interface LlmAnnotation {

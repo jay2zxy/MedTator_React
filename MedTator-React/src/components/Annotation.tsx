@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
-import { Radio, Button, Switch, Select, Input, Divider, Modal, Spin, message } from 'antd'
+import { Radio, Button, Switch, Select, Input, Divider, Modal, Spin, message, Tooltip } from 'antd'
 import {
   SearchOutlined,
   ClearOutlined,
@@ -21,6 +21,7 @@ import {
   RobotOutlined,
   SettingOutlined,
   ApiOutlined,
+  CloudOutlined,
 } from '@ant-design/icons'
 import { openSearchPanel } from '@codemirror/search'
 import { useAppStore } from '../store'
@@ -34,6 +35,7 @@ import AnnotationEditor from './AnnotationEditor'
 import AnnotationTable from './AnnotationTable'
 import SchemaEditor from './SchemaEditor'
 import { checkOllamaStatus, listModels } from '../utils/ollama-client'
+import type { OllamaModelInfo } from '../utils/ollama-client'
 import type { DtdTag } from '../types'
 
 // ── Save helper (reads store directly, safe to call from event handlers) ──
@@ -73,11 +75,18 @@ function ToolbarRibbon() {
   const openSchemaEditorCopy = useAppStore(state => state.openSchemaEditorCopy)
 
   const [ollamaSettingsOpen, setOllamaSettingsOpen] = useState(false)
-  const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
   const [ollamaTestStatus, setOllamaTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
 
   const schemaInputRef = useRef<HTMLInputElement>(null)
   const annInputRef = useRef<HTMLInputElement>(null)
+
+  const truncateFilename = (name: string, maxLen = 20) => {
+    if (name.length <= maxLen) return name
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot) : ''
+    return name.slice(0, maxLen - ext.length) + '...' + ext
+  }
 
   // Handle schema file
   const handleSchemaFile = async (file: File) => {
@@ -255,17 +264,115 @@ function ToolbarRibbon() {
           ) : !dtd ? (
             <span style={{ color: '#999' }}>&larr; Load schema file first</span>
           ) : annIdx !== null ? (
-            <>
-              <b style={{ fontSize: 11 }}>{anns[annIdx]._filename}</b><br />
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
+              <Tooltip title={anns[annIdx]._filename ?? ''}>
+                <b style={{ fontSize: 11 }}>{truncateFilename(anns[annIdx]._filename ?? '')}</b>
+              </Tooltip>
               <span style={{ color: '#888' }}>{anns[annIdx].text.length} chars · {anns[annIdx].tags.length} tags</span>
-            </>
+            </span>
           ) : anns.length === 0 ? (
-            <>Drop <b>Annotation</b><br />File(s) Here</>
+            <span>Drop <b>Annotation</b><br />File(s) Here</span>
           ) : (
             <span style={{ color: '#888' }}>Select file<br />in the list</span>
           )}
         </div>
       </ToolbarGroup>
+
+      {/* Auto-Annotate (LLM) */}
+      <ToolbarGroup label="Auto-Annotate (LLM)">
+        <Button
+          size="small"
+          icon={isAutoAnnotating ? <Spin size="small" /> : <RobotOutlined />}
+          disabled={!dtd || annIdx === null || isAutoAnnotating}
+          onClick={async () => {
+            try {
+              const count = await useAppStore.getState().autoAnnotate()
+              message.success(`Auto-annotated: ${count} new tags added`)
+            } catch (err: any) {
+              message.error(`Auto-annotate failed: ${err.message}`)
+            }
+          }}
+        >
+          {isAutoAnnotating ? 'Annotating...' : 'Annotate'}
+        </Button>
+        <Button
+          size="small"
+          icon={<SettingOutlined />}
+          onClick={() => {
+            setOllamaSettingsOpen(true)
+            setOllamaTestStatus('idle')
+            listModels(ollamaConfig).then(setOllamaModels).catch(() => {})
+          }}
+        />
+      </ToolbarGroup>
+
+      {/* Ollama Settings Modal */}
+      <Modal
+        title={<><ApiOutlined /> Ollama Settings</>}
+        open={ollamaSettingsOpen}
+        onCancel={() => setOllamaSettingsOpen(false)}
+        footer={<Button onClick={() => setOllamaSettingsOpen(false)}>Close</Button>}
+        width={420}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div style={{ marginBottom: 4, fontWeight: 500 }}>Ollama URL</div>
+            <Input
+              value={ollamaConfig.baseUrl}
+              onChange={e => setOllamaConfig({ baseUrl: e.target.value })}
+              placeholder="http://localhost:11434"
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 4, fontWeight: 500 }}>Model</div>
+            <Select
+              style={{ width: '100%' }}
+              value={ollamaConfig.model}
+              onChange={v => setOllamaConfig({ model: v })}
+              options={ollamaModels.map(m => ({
+                value: m.name,
+                disabled: m.isRemote,
+                label: m.isRemote
+                  ? <span style={{ color: '#bbb' }}>{m.name} <CloudOutlined style={{ color: '#bbb', marginLeft: 4 }} /></span>
+                  : m.name,
+              }))}
+              showSearch
+              placeholder="Select a model"
+              notFoundContent={<span style={{ color: '#999' }}>Click "Test Connection" to load models</span>}
+            />
+          </div>
+          <Button
+            icon={<ApiOutlined />}
+            loading={ollamaTestStatus === 'testing'}
+            onClick={async () => {
+              setOllamaTestStatus('testing')
+              try {
+                const ok = await checkOllamaStatus(ollamaConfig)
+                if (ok) {
+                  setOllamaTestStatus('ok')
+                  const models = await listModels(ollamaConfig)
+                  setOllamaModels(models)
+                  const names = models.map(m => m.name)
+                  if (models.length > 0 && !names.includes(ollamaConfig.model)) {
+                    setOllamaConfig({ model: names[0] })
+                  }
+                  message.success(`Connected! ${models.length} model(s) available`)
+                } else {
+                  setOllamaTestStatus('fail')
+                  message.error('Ollama responded but returned an error')
+                }
+              } catch {
+                setOllamaTestStatus('fail')
+                message.error('Cannot connect to Ollama. Is it running?')
+              }
+            }}
+          >
+            Test Connection
+            {ollamaTestStatus === 'ok' && <CheckOutlined style={{ color: '#52c41a', marginLeft: 4 }} />}
+            {ollamaTestStatus === 'fail' && <StopOutlined style={{ color: '#f5222d', marginLeft: 4 }} />}
+          </Button>
+        </div>
+      </Modal>
 
       {/* Save — shown only when a file is open */}
       {annIdx !== null && (
@@ -355,109 +462,7 @@ function ToolbarRibbon() {
         </div>
       </ToolbarGroup>
 
-      {/* Auto-Annotate (LLM) */}
-      <ToolbarGroup label="Auto-Annotate (LLM)">
-        <Button
-          size="small"
-          icon={isAutoAnnotating ? <Spin size="small" /> : <RobotOutlined />}
-          disabled={!dtd || annIdx === null || isAutoAnnotating}
-          onClick={async () => {
-            try {
-              const count = await useAppStore.getState().autoAnnotate()
-              message.success(`Auto-annotated: ${count} new tags added`)
-            } catch (err: any) {
-              message.error(`Auto-annotate failed: ${err.message}`)
-            }
-          }}
-        >
-          {isAutoAnnotating ? 'Annotating...' : 'Annotate'}
-        </Button>
-        <Button
-          size="small"
-          icon={<SettingOutlined />}
-          onClick={() => {
-            setOllamaSettingsOpen(true)
-            setOllamaTestStatus('idle')
-            listModels(ollamaConfig).then(setOllamaModels).catch(() => {})
-          }}
-        />
-      </ToolbarGroup>
-
-      {/* Ollama Settings Modal */}
-      <Modal
-        title={<><ApiOutlined /> Ollama Settings</>}
-        open={ollamaSettingsOpen}
-        onCancel={() => setOllamaSettingsOpen(false)}
-        footer={<Button onClick={() => setOllamaSettingsOpen(false)}>Close</Button>}
-        width={420}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <div style={{ marginBottom: 4, fontWeight: 500 }}>Ollama URL</div>
-            <Input
-              value={ollamaConfig.baseUrl}
-              onChange={e => setOllamaConfig({ baseUrl: e.target.value })}
-              placeholder="http://localhost:11434"
-            />
-          </div>
-          <div>
-            <div style={{ marginBottom: 4, fontWeight: 500 }}>Model</div>
-            <Select
-              style={{ width: '100%' }}
-              value={ollamaConfig.model}
-              onChange={v => setOllamaConfig({ model: v })}
-              options={ollamaModels.map(m => ({ value: m, label: m }))}
-              showSearch
-              placeholder="Select a model"
-              notFoundContent={<span style={{ color: '#999' }}>Click "Test Connection" to load models</span>}
-            />
-          </div>
-          <Button
-            icon={<ApiOutlined />}
-            loading={ollamaTestStatus === 'testing'}
-            onClick={async () => {
-              setOllamaTestStatus('testing')
-              try {
-                const ok = await checkOllamaStatus(ollamaConfig)
-                if (ok) {
-                  setOllamaTestStatus('ok')
-                  const models = await listModels(ollamaConfig)
-                  setOllamaModels(models)
-                  message.success(`Connected! ${models.length} model(s) available`)
-                } else {
-                  setOllamaTestStatus('fail')
-                  message.error('Ollama responded but returned an error')
-                }
-              } catch {
-                setOllamaTestStatus('fail')
-                message.error('Cannot connect to Ollama. Is it running?')
-              }
-            }}
-          >
-            Test Connection
-            {ollamaTestStatus === 'ok' && <CheckOutlined style={{ color: '#52c41a', marginLeft: 4 }} />}
-            {ollamaTestStatus === 'fail' && <StopOutlined style={{ color: '#f5222d', marginLeft: 4 }} />}
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Help */}
-      <ToolbarGroup label="Help">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
-            <EditOutlined style={{ fontSize: 22 }} />
-            <span style={{ fontSize: 10 }}>Sample</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
-            <ToolOutlined style={{ fontSize: 22 }} />
-            <span style={{ fontSize: 10 }}>Schema</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
-            <InfoCircleOutlined style={{ fontSize: 22 }} />
-            <span style={{ fontSize: 10 }}>Wiki</span>
-          </div>
-        </div>
-      </ToolbarGroup>
+      
     </div>
   )
 }
