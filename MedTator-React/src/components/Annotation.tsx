@@ -12,14 +12,13 @@ import {
   RightOutlined,
   CheckOutlined,
   StopOutlined,
-  EditOutlined,
   ToolOutlined,
-  InfoCircleOutlined,
   DeleteOutlined,
   MinusCircleOutlined,
   AppstoreOutlined,
   RobotOutlined,
   SettingOutlined,
+  CloseOutlined,
   ApiOutlined,
   CloudOutlined,
 } from '@ant-design/icons'
@@ -70,6 +69,7 @@ function ToolbarRibbon() {
   const ollamaConfig = useAppStore(state => state.ollamaConfig)
   const setOllamaConfig = useAppStore(state => state.setOllamaConfig)
   const isAutoAnnotating = useAppStore(state => state.isAutoAnnotating)
+  const cancelAutoAnnotate = useAppStore(state => state.cancelAutoAnnotate)
 
   const openSchemaEditorNew = useAppStore(state => state.openSchemaEditorNew)
   const openSchemaEditorCopy = useAppStore(state => state.openSchemaEditorCopy)
@@ -282,6 +282,7 @@ function ToolbarRibbon() {
       <ToolbarGroup label="Auto-Annotate (LLM)">
         <Button
           size="small"
+          style={{ width: 110 }}
           icon={isAutoAnnotating ? <Spin size="small" /> : <RobotOutlined />}
           disabled={!dtd || annIdx === null || isAutoAnnotating}
           onClick={async () => {
@@ -289,7 +290,11 @@ function ToolbarRibbon() {
               const count = await useAppStore.getState().autoAnnotate()
               message.success(`Auto-annotated: ${count} new tags added`)
             } catch (err: any) {
-              message.error(`Auto-annotate failed: ${err.message}`)
+              if (err.name === 'AbortError') {
+                message.info('Auto-annotation cancelled')
+              } else {
+                message.error(`Auto-annotate failed: ${err.message}`)
+              }
             }
           }}
         >
@@ -297,11 +302,16 @@ function ToolbarRibbon() {
         </Button>
         <Button
           size="small"
-          icon={<SettingOutlined />}
+          danger={isAutoAnnotating}
+          icon={isAutoAnnotating ? <CloseOutlined /> : <SettingOutlined />}
           onClick={() => {
-            setOllamaSettingsOpen(true)
-            setOllamaTestStatus('idle')
-            listModels(ollamaConfig).then(setOllamaModels).catch(() => {})
+            if (isAutoAnnotating) {
+              cancelAutoAnnotate()
+            } else {
+              setOllamaSettingsOpen(true)
+              setOllamaTestStatus('idle')
+              listModels(ollamaConfig).then(setOllamaModels).catch(() => {})
+            }
           }}
         />
       </ToolbarGroup>
@@ -331,7 +341,7 @@ function ToolbarRibbon() {
               onChange={v => setOllamaConfig({ model: v })}
               options={ollamaModels.map(m => ({
                 value: m.name,
-                disabled: m.isRemote,
+                // disabled: m.isRemote,
                 label: m.isRemote
                   ? <span style={{ color: '#bbb' }}>{m.name} <CloudOutlined style={{ color: '#bbb', marginLeft: 4 }} /></span>
                   : m.name,
