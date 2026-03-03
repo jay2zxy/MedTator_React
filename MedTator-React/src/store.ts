@@ -127,6 +127,7 @@ interface AppState {
   isAutoAnnotating: boolean
   setOllamaConfig: (config: Partial<OllamaConfig>) => void
   autoAnnotate: () => Promise<number>
+  cancelAutoAnnotate: () => void
 }
 
 // ── Store ──
@@ -465,11 +466,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { anns, annIdx, dtd } = get()
     if (annIdx === null || !dtd) return 0
 
+    const abortController = new AbortController()
+    ;(get() as any)._annotateAbortController = abortController
     set({ isAutoAnnotating: true })
     try {
       const ann = anns[annIdx]
       const etags = dtd.etags.map((t) => ({ name: t.name, description: t.description }))
-      const llmResult = await requestAutoAnnotation(get().ollamaConfig, ann.text, etags)
+      const llmResult = await requestAutoAnnotation(get().ollamaConfig, ann.text, etags, abortController.signal)
       const newTags = llmAnnotationsToTags(llmResult, ann, dtd)
 
       for (const tag of newTags) {
@@ -480,7 +483,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ anns: [...anns] })
       return newTags.length
     } finally {
+      ;(get() as any)._annotateAbortController = null
       set({ isAutoAnnotating: false })
     }
+  },
+  cancelAutoAnnotate: () => {
+    const ctrl = (get() as any)._annotateAbortController as AbortController | null
+    ctrl?.abort()
   },
 }))

@@ -1,24 +1,13 @@
 """
-LLM Auto-Annotation Evaluation Script  (2x2 ablation)
-Dataset: VAERS_20_NOTES (20 COVID-19 adverse event reports)
-Metrics: Precision / Recall / F1 (span overlap, same tag type)
-
-Conditions (2x2):
-  A: desc=OFF  neg=OFF
-  B: desc=ON   neg=OFF
-  C: desc=OFF  neg=ON
-  D: desc=ON   neg=ON
-
-LLM outputs are cached per (file, use_descriptions) so that
-neg=OFF vs neg=ON share the exact same LLM predictions — clean ablation.
+LLM Auto-Annotation Evaluation Script (3 samples quick test)
 """
 
-import os, re, json, glob, requests
+import os, re, json, glob, requests, time
 from xml.etree import ElementTree as ET
 
 # ── Config ──────────────────────────────────────────────────────────────
 OLLAMA_URL   = "http://localhost:11434"
-MODELS       = ["qwen3:8b"]
+MODEL        = "qwen3:8b"
 XML_DIR      = r"C:\Users\del\Desktop\Work\MedTator\sample\VAERS_20_NOTES\ann_xml"
 TAG_NAMES    = [
     "Vaccine","Fever","Pain","Headache","Myalgia","Fatigue",
@@ -75,16 +64,16 @@ def parse_gold(xml_path):
     return text, tags
 
 # ── LLM call ────────────────────────────────────────────────────────────
-def call_llm(model, text, tag_names, use_descriptions):
+def call_llm(text, tag_names):
     tag_list = ', '.join(tag_names)
-    if use_descriptions:
-        desc_block = 'Tag definitions:\n' + '\n'.join(f'  - {t}: {TAG_DESCRIPTIONS[t]}' for t in tag_names) + '\n\n'
-    else:
-        desc_block = ''
+    tag_desc_lines = '\n'.join(f'  - {t}: {TAG_DESCRIPTIONS[t]}' for t in tag_names)
     prompt = f"""You are a clinical text annotation assistant.
 Identify medical concepts in the following text and classify them using ONLY these exact tag names: {tag_list}
 
-{desc_block}Return JSON only, no explanation. Format:
+Tag definitions:
+{tag_desc_lines}
+
+Return JSON only, no explanation. Format:
 {{"annotations": [{{"keyword": "core clinical term", "tag": "TagName"}}]}}
 
 Rules:
@@ -99,9 +88,9 @@ Text:
     try:
         resp = requests.post(
             f"{OLLAMA_URL}/api/chat",
-            json={"model": model, "messages": [{"role": "user", "content": prompt}],
+            json={"model": MODEL, "messages": [{"role": "user", "content": prompt}],
                   "stream": False, "format": "json", "options": {"temperature": 0}},
-            timeout=180
+            timeout=60  # Shorter timeout
         )
         resp.raise_for_status()
         content = resp.json()["message"]["content"]
@@ -120,11 +109,15 @@ Text:
 def get_locs(keyword, text):
     escaped = re.escape(keyword)
     pattern = escaped.replace(r'\ ', r'\s+')
-    return [(m.start(), m.end()) for m in re.finditer(pattern, text, re.IGNORECASE)]
+    results = []
+    for m in re.finditer(pattern, text, re.IGNORECASE):
+        results.append((m.start(), m.end()))
+    return results
 
 # ── Negation filter ──────────────────────────────────────────────────────
 def is_negated(start, end, text):
-    pre_text = text[max(0, start - 60):start]
+    pre_start = max(0, start - 60)
+    pre_text  = text[pre_start:start]
     breakers = list(SCOPE_BREAKERS.finditer(pre_text))
     if breakers:
         pre_text = pre_text[breakers[-1].end():]
@@ -134,7 +127,9 @@ def is_negated(start, end, text):
     breakers = list(SCOPE_BREAKERS.finditer(post_text))
     if breakers:
         post_text = post_text[:breakers[0].start()]
-    return bool(NEGATION_POST.search(post_text))
+    if NEGATION_POST.search(post_text):
+        return True
+    return False
 
 # ── Span overlap matching ────────────────────────────────────────────────
 def spans_overlap(a_start, a_end, b_start, b_end):
@@ -161,45 +156,42 @@ def prf(tp, fp, fn):
     f = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
     return p, r, f
 
-# ── Localize + dedup (shared post-processing) ───────────────────────────
-def localize(llm_anns, text):
-    """keyword→tag pairs → deduplicated span predictions"""
-    raw = []
-    for ann in llm_anns:
-        if ann['tag'] not in TAG_NAMES:
-            continue
-        for start, end in get_locs(ann['keyword'], text):
-            raw.append({'tag': ann['tag'], 'start': start, 'end': end})
-    raw.sort(key=lambda x: x['start'])
-    deduped = []
-    for pred in raw:
-        if any(pred['tag'] == k['tag'] and spans_overlap(pred['start'], pred['end'], k['start'], k['end'])
-               for k in deduped):
-            continue
-        deduped.append(pred)
-    return deduped
-
 # ── Main evaluation ──────────────────────────────────────────────────────
-def evaluate(model, use_descriptions, use_negation_filter, llm_cache):
-    xml_files = sorted(glob.glob(os.path.join(XML_DIR, '*.xml')))
+def evaluate(use_negation_filter, xml_files):
     total_tp = total_fp = total_fn = 0
     negation_suppressed = 0
     negation_correct    = 0
 
-    for xml_path in xml_files:
+    for idx, xml_path in enumerate(xml_files):
         text, gold_tags = parse_gold(xml_path)
         gold_positive = [t for t in gold_tags if t['certainty'] != 'negated']
         gold_negated  = [t for t in gold_tags if t['certainty'] == 'negated']
 
-        # use cached LLM output — same predictions for neg=ON and neg=OFF
-        cache_key = (xml_path, use_descriptions)
-        if cache_key not in llm_cache:
-            print(f"  [LLM] {os.path.basename(xml_path)} desc={'ON' if use_descriptions else 'OFF'}")
-            llm_cache[cache_key] = call_llm(model, text, TAG_NAMES, use_descriptions)
-        llm_anns = llm_cache[cache_key]
+        print(f"  [{idx+1}/{len(xml_files)}] {os.path.basename(xml_path)}...", end=" ", flush=True)
+        t0 = time.time()
+        llm_anns = call_llm(text, TAG_NAMES)
+        elapsed = time.time() - t0
+        print(f"LLM={len(llm_anns)} in {elapsed:.1f}s", end="")
 
-        predicted_raw = localize(llm_anns, text)
+        # localize spans
+        predicted_raw = []
+        for ann in llm_anns:
+            if ann['tag'] not in TAG_NAMES:
+                continue
+            for start, end in get_locs(ann['keyword'], text):
+                predicted_raw.append({'tag': ann['tag'], 'start': start, 'end': end})
 
+        # dedup
+        predicted_raw.sort(key=lambda x: x['start'])
+        deduped = []
+        for pred in predicted_raw:
+            if any(pred['tag'] == k['tag'] and spans_overlap(pred['start'], pred['end'], k['start'], k['end'])
+                   for k in deduped):
+                continue
+            deduped.append(pred)
+        predicted_raw = deduped
+
+        # apply negation filter
         if use_negation_filter:
             predicted = []
             for pred in predicted_raw:
@@ -219,49 +211,27 @@ def evaluate(model, use_descriptions, use_negation_filter, llm_cache):
         total_fp += fp
         total_fn += fn
 
-        fname = os.path.basename(xml_path)
         p, r, f = prf(tp, fp, fn)
-        print(f"    {fname}: P={p:.2f} R={r:.2f} F1={f:.2f}  (tp={tp} fp={fp} fn={fn})")
+        print(f"  P={p:.2f} R={r:.2f} F1={f:.2f} (tp={tp} fp={fp} fn={fn})")
 
     return total_tp, total_fp, total_fn, negation_suppressed, negation_correct
 
-# ── Run 2x2 ──────────────────────────────────────────────────────────────
-CONDITIONS = [
-    ('A', False, False),
-    ('B', True,  False),
-    ('C', False, True),
-    ('D', True,  True),
-]
+# ── Run ──────────────────────────────────────────────────────────────────
+xml_files = sorted(glob.glob(os.path.join(XML_DIR, '*.xml')))[:3]  # Only first 3 samples
+print(f"\n{'='*70}")
+print(f"Evaluating {len(xml_files)} samples with {MODEL}")
+print(f"{'='*70}\n")
 
-results = {}
-for model in MODELS:
-    llm_cache = {}  # shared across all 4 conditions for this model
-    for cond, use_desc, use_neg in CONDITIONS:
-        label = f"{cond}: desc={'ON' if use_desc else 'OFF'} | neg={'ON' if use_neg else 'OFF'}"
-        print(f"\n{'='*60}")
-        print(f"  {model} | {label}")
-        print(f"{'='*60}")
-        tp, fp, fn, suppressed, correct = evaluate(model, use_desc, use_neg, llm_cache)
-        p, r, f = prf(tp, fp, fn)
-        results[label] = {'P': p, 'R': r, 'F1': f, 'TP': tp, 'FP': fp, 'FN': fn,
-                          'neg_suppressed': suppressed, 'neg_correct': correct}
+for use_neg in [False, True]:
+    label = f"negation={'ON' if use_neg else 'OFF'}"
+    print(f"\n{'='*60}")
+    print(f"  {label}")
+    print(f"{'='*60}")
+    tp, fp, fn, suppressed, correct = evaluate(use_neg, xml_files)
+    p, r, f = prf(tp, fp, fn)
+    print(f"\n  TOTAL: P={p:.3f} R={r:.3f} F1={f:.3f} (TP={tp} FP={fp} FN={fn})")
+    if suppressed > 0:
+        print(f"  Negation filter: suppressed={suppressed}, correct={correct}")
 
-# ── Summary table ────────────────────────────────────────────────────────
-print(f"\n{'='*75}")
-print(f"{'Condition':<32} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5}")
-print(f"{'-'*75}")
-for label, m in results.items():
-    neg_note = f"  (suppressed {m['neg_suppressed']}, {m['neg_correct']} correct)" if m['neg_suppressed'] > 0 else ""
-    print(f"{label:<32} {m['P']:>6.3f} {m['R']:>6.3f} {m['F1']:>6.3f} {m['TP']:>5} {m['FP']:>5} {m['FN']:>5}{neg_note}")
-print(f"{'='*75}")
-
-print("\nAblation summary:")
-if all(k in results for k in ['A: desc=OFF | neg=OFF', 'B: desc=ON | neg=OFF']):
-    a, b = results['A: desc=OFF | neg=OFF'], results['B: desc=ON | neg=OFF']
-    print(f"  Tag descriptions (B vs A): R {a['R']:.3f} → {b['R']:.3f}  F1 {a['F1']:.3f} → {b['F1']:.3f}")
-if all(k in results for k in ['B: desc=ON | neg=OFF', 'D: desc=ON | neg=ON']):
-    b, d = results['B: desc=ON | neg=OFF'], results['D: desc=ON | neg=ON']
-    print(f"  Negation filter w/ desc (D vs B): F1 {b['F1']:.3f} → {d['F1']:.3f}")
-if all(k in results for k in ['A: desc=OFF | neg=OFF', 'C: desc=OFF | neg=ON']):
-    a, c = results['A: desc=OFF | neg=OFF'], results['C: desc=OFF | neg=ON']
-    print(f"  Negation filter w/o desc (C vs A): F1 {a['F1']:.3f} → {c['F1']:.3f}")
+print(f"\n{'='*70}")
+print("Done.")

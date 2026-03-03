@@ -40,7 +40,8 @@ export interface LlmAnnotation {
 export async function requestAutoAnnotation(
   config: OllamaConfig,
   text: string,
-  etags: Array<{ name: string; description?: string }>
+  etags: Array<{ name: string; description?: string }>,
+  signal?: AbortSignal
 ): Promise<LlmAnnotation[]> {
   const tagList = etags.map(t => t.name).join(', ')
   const tagLines = etags.map(t =>
@@ -73,6 +74,7 @@ Rules:
   const resp = await fetch(`${config.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal,
     body: JSON.stringify({
       model: config.model,
       stream: false,

@@ -33,6 +33,7 @@ export default function RelationLines({ viewRef }: Props) {
   const displayTagName = useAppStore((s) => s.displayTagName)
   const enabledLinks = useAppStore((s) => s.cm.enabledLinks)
   const enabledLinkName = useAppStore((s) => s.cm.enabledLinkName)
+  const displayMode = useAppStore((s) => s.cm.displayMode)
 
   const [lines, setLines] = useState<LineData[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -148,13 +149,16 @@ export default function RelationLines({ viewRef }: Props) {
     setLines(newLines)
   }, [viewRef])
 
-  // Update lines on data change — delay one frame so CM6 renders first
+  // Update lines on data change — delay two frames so CM6 renders first
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      calculateLines()
+    let raf1: number, raf2: number
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        calculateLines()
+      })
     })
-    return () => cancelAnimationFrame(raf)
-  }, [anns, annIdx, dtd, displayTagName, enabledLinks, enabledLinkName, calculateLines])
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+  }, [anns, annIdx, dtd, displayTagName, enabledLinks, enabledLinkName, displayMode, calculateLines])
 
   // Recalculate on CM6 scroll
   useEffect(() => {
