@@ -37,6 +37,48 @@ export interface LlmAnnotation {
   tag: string
 }
 
+/**
+ * Robustly extract a JSON object from arbitrary LLM output.
+ * Handles: <think> blocks, unclosed <think>, markdown fences, surrounding text.
+ */
+function extractJson(raw: string): any {
+  // 1. Strip closed <think>...</think> blocks (Qwen 3, DeepSeek-R1, etc.)
+  let text = raw.replace(/<think>[\s\S]*?<\/think>/g, '')
+  // 2. Strip unclosed <think> (model cut off or never closed)
+  const openIdx = text.lastIndexOf('<think>')
+  if (openIdx !== -1) text = text.slice(0, openIdx)
+  text = text.trim()
+
+  // 3. Extract content from markdown code fences
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+  if (fenceMatch) text = fenceMatch[1].trim()
+
+  // 4. Try direct parse
+  try { return JSON.parse(text) } catch { /* continue */ }
+
+  // 5. Bracket-matching: find all balanced {...} candidates, try longest first
+  const candidates: string[] = []
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      let depth = 0
+      for (let j = i; j < text.length; j++) {
+        if (text[j] === '{') depth++
+        else if (text[j] === '}') depth--
+        if (depth === 0) {
+          candidates.push(text.slice(i, j + 1))
+          break
+        }
+      }
+    }
+  }
+  candidates.sort((a, b) => b.length - a.length)
+  for (const c of candidates) {
+    try { return JSON.parse(c) } catch { /* next */ }
+  }
+
+  return null
+}
+
 export async function requestAutoAnnotation(
   config: OllamaConfig,
   text: string,
@@ -66,7 +108,8 @@ Rules:
 - keyword must appear verbatim in the text (exact spelling, case-insensitive)
 - ONLY use these exact tag names: ${tagList}
 - Do not invent or substitute other tag names
-- Find ALL relevant mentions, including duplicates at different positions`
+- Find ALL relevant mentions, including duplicates at different positions
+- Do NOT explain. Output the JSON object ONLY.`
 
   console.log('[LLM prompt] tags:', etags.map(t => t.description ? `${t.name}: ${t.description}` : t.name))
   console.log('[LLM prompt] user prompt:\n', userPrompt)
@@ -78,8 +121,6 @@ Rules:
     body: JSON.stringify({
       model: config.model,
       stream: false,
-      format: 'json',
-      options: { temperature: 0 },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -93,29 +134,17 @@ Rules:
   }
 
   const data = await resp.json()
-  const content = data.message?.content || ''
-  console.log('[LLM raw response]', content) 
-  
-  // Some models wrap JSON in markdown code fences — strip them before parsing
-  const stripped = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  const rawContent = data.message?.content || ''
+  console.log('[LLM raw response]', rawContent)
 
-  let parsed: any
-  try {
-    parsed = JSON.parse(stripped)
-  } catch {
-    // Fallback: extract the first {...} block from the response
-    const match = stripped.match(/\{[\s\S]*\}/)
-    if (match) {
-      try { parsed = JSON.parse(match[0]) } catch { /* fall through */ }
-    }
-    if (!parsed) {
-      throw new Error(`Failed to parse LLM response as JSON: ${content.slice(0, 200)}`)
-    }
+  const parsed = extractJson(rawContent)
+  if (!parsed) {
+    throw new Error(`Failed to parse LLM response as JSON: ${rawContent.slice(0, 300)}`)
   }
 
   const annotations: LlmAnnotation[] = parsed.annotations || parsed.results || []
   if (!Array.isArray(annotations)) {
-    throw new Error(`LLM response missing annotations array: ${content.slice(0, 200)}`)
+    throw new Error(`LLM response missing annotations array: ${rawContent.slice(0, 300)}`)
   }
 
   return annotations.filter(

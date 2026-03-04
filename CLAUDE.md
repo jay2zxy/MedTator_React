@@ -20,7 +20,7 @@
 
 ---
 
-## 项目状态（截至 2026-02-26）
+## 项目状态（截至 2026-03-03）
 
 | 模块 | 状态 | 提交 |
 |------|------|------|
@@ -30,7 +30,7 @@
 | M4 标注编辑器（10 Phase） | ✅ | 8abb46a→89b25a5 |
 | M5 Schema Editor | ✅ | 0ac5eb2 |
 | M6 其他 Tab（Statistics/Export/Converter/IAA/Toolkit） | ✅ | 5c31721→845e9d4 |
-| M7 LLM 自动标注（Ollama） | ✅ | 8f37861→c96d8b0→待提交 |
+| M7 LLM 自动标注（Ollama） | ✅ | 8f37861→ce7af94 |
 | M8 Electron 打包 | ⏸ 待开始 | |
 | M9 联调修 bug | ⏸ 待开始 | |
 

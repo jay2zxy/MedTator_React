@@ -341,7 +341,7 @@ function ToolbarRibbon() {
               onChange={v => setOllamaConfig({ model: v })}
               options={ollamaModels.map(m => ({
                 value: m.name,
-                // disabled: m.isRemote,
+                disabled: m.isRemote,
                 label: m.isRemote
                   ? <span style={{ color: '#bbb' }}>{m.name} <CloudOutlined style={{ color: '#bbb', marginLeft: 4 }} /></span>
                   : m.name,
