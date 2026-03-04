@@ -613,4 +613,50 @@ LLM 工程
 
 **验证**：编译零错误，45 个测试全部通过
 
-*最后更新: 2026-02-26*
+---
+
+### 2026-03-03 - Session 7.4 UI 打磨 + Abort + RelationLines 修复
+
+**提交 c0ac9b9** — UI polish: filename truncation + Ollama model cloud tag
+
+- ✅ `Annotation.tsx`：文件名截断（20 字符 + 扩展名），Tooltip 显示完整名
+- ✅ `Annotation.tsx`：Drop Annotation 区域 flex 布局修复
+- ✅ `ollama-client.ts`：`listModels` 返回 `OllamaModelInfo`（含 `isRemote` 标志，基于 `remote_model` 字段）
+- ✅ 远程模型显示云图标（`<CloudOutlined />`），灰色文字区分
+- ✅ 当前选中模型不在列表时，自动切到第一个可用模型
+- ✅ 默认模型从 `mistral:latest` 改为 `qwen3:8b`
+
+**提交 ce7af94** — M7 LLM: Add abort functionality + RelationLines render fix
+
+- ✅ `store.ts`：新增 `cancelAutoAnnotate()` action + `AbortController` 管理
+- ✅ `ollama-client.ts`：`requestAutoAnnotation` 接收 `signal?: AbortSignal`，传入 `fetch`
+- ✅ `Annotation.tsx`：
+  - Annotate 按钮加宽（110px），标注中显示 "Annotating..."
+  - Settings 按钮变为 Cancel 按钮（红色 `<CloseOutlined />`），中止后提示 "cancelled"
+  - 移除 Help 工具栏组（Sample/Schema/Wiki 占位按钮）
+- ✅ `RelationLines.tsx`：
+  - 双帧 `requestAnimationFrame` 延迟（等 CM6 完全渲染后再算坐标）
+  - 依赖数组加入 `displayMode`（切换 text/sentence 模式时重算连线）
+- ✅ `quantum_test/`：新增 `eval_3samples.py`、`eval_quick.py` 评测脚本
+
+**验证**：编译零错误，45 个测试通过
+
+---
+
+### 项目总进度（更新）
+
+| 模块 | 状态 | 提交 |
+|------|------|------|
+| M1 项目搭建 | ✅ 完成 | e9c5464 |
+| M2 解析器移植 | ✅ 完成 | 多次提交 |
+| M3 状态+文件 | ✅ 完成 | 多次提交 |
+| M4 标注编辑器 (10 Phase) | ✅ 完成 | 8abb46a → 89b25a5 |
+| M5 Schema Editor | ✅ 完成 | 0ac5eb2 |
+| M6 功能 Tab (5 Phase) | ✅ 完成 | 5c31721 → 845e9d4 |
+| M7 LLM 自动标注 | ✅ 完成 | 8f37861 → ce7af94 |
+| M8 Electron 打包 | ⏸ 待开始 | |
+| M9 联调修 bug | ⏸ 待开始 | |
+
+**下一步**：M8 Electron 桌面打包 或 M9 联调修 bug
+
+*最后更新: 2026-03-03*

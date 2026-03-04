@@ -317,7 +317,7 @@ export default function Converter() {
         <TG label="Conversion">
           <RibbonBtn icon={<ExperimentOutlined />} label="Convert Files"
             disabled={!dtd} onClick={convert}
-            title="Convert loaded files to MedTator XML" />
+            title="Convert loaded files to MedGenie XML" />
         </TG>
 
         <TG label="Results">
@@ -403,7 +403,7 @@ export default function Converter() {
             padding: 10, background: '#f6ffed', minHeight: 80,
           }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#52c41a', marginBottom: 6 }}>
-              Generated MedTator XML Files
+              Generated MedGenie XML Files
             </div>
             {results.length === 0 ? (
               <div style={{ color: '#999', fontSize: 12 }}>

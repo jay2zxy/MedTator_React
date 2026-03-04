@@ -1,5 +1,5 @@
 from docx import Document
-from docx.shared import Pt, Inches, Cm, RGBColor
+from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
@@ -24,7 +24,7 @@ style.paragraph_format.line_spacing = 1.0
 # ── Title ──
 p = doc.add_paragraph()
 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = p.add_run('Modernizing MedTator: A Privacy-Preserving Clinical Text Annotation Platform\nwith Local Large Language Model Integration')
+run = p.add_run('MedGenie: Privacy-Preserving Clinical Text Annotation Platform\nwith LLM Integration')
 run.bold = True
 run.font.size = Pt(12)
 run.font.name = 'Times New Roman'
@@ -32,12 +32,28 @@ run.font.name = 'Times New Roman'
 # ── Authors ──
 p = doc.add_paragraph()
 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = p.add_run('[Author Names]')
+run = p.add_run('Xiangyu Zeng, MS')
 run.font.size = Pt(10)
 run.font.name = 'Times New Roman'
+sup = p.add_run('1')
+sup.font.size = Pt(7)
+sup.font.name = 'Times New Roman'
+sup.font.superscript = True
+run = p.add_run(', Yanshan Wang, PhD')
+run.font.size = Pt(10)
+run.font.name = 'Times New Roman'
+sup = p.add_run('1')
+sup.font.size = Pt(7)
+sup.font.name = 'Times New Roman'
+sup.font.superscript = True
+
 p2 = doc.add_paragraph()
 p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run2 = p2.add_run('[Department], [University]')
+sup2 = p2.add_run('1')
+sup2.font.size = Pt(7)
+sup2.font.name = 'Times New Roman'
+sup2.font.superscript = True
+run2 = p2.add_run('PittNAIL Lab, Department of Health Information Management, University of Pittsburgh, Pittsburgh, PA, USA')
 run2.font.size = Pt(9)
 run2.font.name = 'Times New Roman'
 run2.italic = True
@@ -62,24 +78,20 @@ def add_section(heading, body_parts):
         run.font.name = 'Times New Roman'
     return p2
 
-# ── Background ──
+# ── Background (compressed) ──
 add_section('Background', [
-    ('Clinical text annotation is foundational to clinical NLP research. MedTator is an open-source annotation tool supporting customizable schemas, multi-format export, and inter-annotator agreement evaluation. However, its original monolithic JavaScript frontend (~18,800 lines without type safety or testing) increasingly limited maintainability and extensibility. Meanwhile, demand for LLM-assisted pre-annotation conflicts with data privacy requirements when processing clinical text containing protected health information (PHI). We present MedTator 2.0, addressing both challenges through a modular architecture and a novel local LLM integration strategy.', False, False),
+    ('Clinical text annotation is foundational to clinical NLP research. Existing open-source tools such as brat and CLAMP often lack integrated pre-annotation capabilities, while commercial platforms (e.g., Label Studio, Generative AI Lab) that incorporate LLMs raise concerns regarding data privacy and regulatory compliance when clinical text containing protected health information (PHI) is processed through cloud-based APIs. We present MedGenie, a modular annotation platform built upon the open-source tool MedTator, combining a clinician-friendly interface with privacy-preserving local LLM integration for secure pre-annotation.', False, False),
 ])
 
 # ── Methods ──
 add_section('Methods', [
-    ('The platform was rebuilt using React, TypeScript, and CodeMirror 6, with 45 unit tests covering parsers, annotation logic, and negation detection. For LLM-assisted annotation, we implemented a three-stage local inference pipeline (Figure 1). ', False, False),
-    ('Stage 1 (Semantic Recognition): ', True, False),
-    ('An on-device LLM via the Ollama framework processes clinical text and returns keyword\u2013tag pairs, restricting the model to classification rather than positional output. ', False, False),
-    ('Stage 2 (Span Localization): ', True, False),
-    ('Precise character offsets are resolved deterministically via regex matching with whitespace normalization, avoiding the well-known limitation of inaccurate LLM-generated span positions. ', False, False),
-    ('Stage 3 (Negation Filtering): ', True, False),
-    ('A bidirectional context-window heuristic\u2014forward 60 characters for pre-negation cues (', False, False),
-    ('denies, no, negative for', False, True),
-    (') and backward 30 characters for post-negation cues (', False, False),
-    ('absent, not found', False, True),
-    (')\u2014suppresses annotations in negated contexts, with sentence boundaries serving as scope breakers.', False, False),
+    ('MedGenie was built using React, TypeScript, and CodeMirror 6, based upon the open-source tool MedTator. For LLM-assisted pre-annotation, we implemented a three-stage local pipeline (Figure 1): ', False, False),
+    ('(1) Semantic Recognition', True, False),
+    (' \u2014 a local LLM via Ollama returns keyword\u2013tag pairs rather than character offsets; ', False, False),
+    ('(2) Span Localization', True, False),
+    (' \u2014 regex matching deterministically resolves precise character positions; ', False, False),
+    ('(3) Negation Filtering', True, False),
+    (' \u2014 a bidirectional context-window heuristic suppresses annotations in negated contexts. All processing runs entirely on-device.', False, False),
 ])
 
 # ── Figure 1: Pipeline diagram as a table ──
@@ -104,12 +116,6 @@ for i, text in enumerate(boxes):
     run.font.name = 'Consolas'
     if i in (1, 3, 5):  # arrow cells
         run.font.size = Pt(12)
-        # Remove borders for arrow cells
-        tc = cell._tc
-        tcPr = tc.get_or_add_tcPr()
-        borders = tcPr.find(qn('w:tcBorders'))
-        if borders is not None:
-            tcPr.remove(borders)
 
 # Row 1: labels
 for i, text in enumerate(labels):
@@ -157,18 +163,29 @@ run = p.add_run('Local LLM annotation pipeline. The model provides only keyword\
 run.font.size = Pt(9)
 run.font.name = 'Times New Roman'
 
-# ── Results ──
+# ── Placeholder for screenshots ──
+p = doc.add_paragraph()
+p.paragraph_format.space_before = Pt(8)
+p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+run = p.add_run('[Figure 2. Screenshot placeholders \u2014 insert app screenshots here]')
+run.font.size = Pt(9)
+run.font.name = 'Times New Roman'
+run.italic = True
+run.font.color.rgb = RGBColor(150, 150, 150)
+
+# ── Results (qualitative, concise) ──
 add_section('Results', [
-    ('MedTator 2.0 reproduces all original features\u2014entity/relation annotation, schema editing, IAA with Cohen\u2019s Kappa, multi-format export, and MedTagger visualization\u2014verified through systematic side-by-side comparison. The keyword-only localization strategy achieved exact span alignment in all matched instances across test documents, and the negation filter correctly suppressed annotations in common negated constructions (e.g., ', False, False),
-    ('\u201cdenies chest pain\u201d', False, True),
-    (') while preserving true positives in subsequent affirmative clauses (e.g., ', False, False),
-    ('\u201cdenies chest pain. Reports nausea\u201d', False, True),
-    (' \u2192 nausea retained). The pipeline was tested with Mistral and DeepSeek models.', False, False),
+    ('MedGenie reproduces all core annotation features of MedTator, including entity/relation annotation, schema editing, IAA with Cohen\u2019s Kappa, multi-format export, and annotation visualization. ', False, False),
+    ('We validated the LLM pipeline on 20 COVID-19 adverse event reports from VAERS against a 17-tag gold standard using qwen3:8b via Ollama. Key findings: (1) per-tag semantic descriptions in the prompt substantially improved recall for non-intuitive mappings (e.g., ', False, False),
+    ('"swollen" \u2192 Myalgia', False, True),
+    ('); (2) short-keyword constraint with overlap deduplication effectively reduced false positives; (3) negation filtering suppressed spurious annotations (e.g., ', False, False),
+    ('"denies chest pain"', False, True),
+    (') while preserving true positives in affirmative clauses. These findings directly shaped the final pipeline design.', False, False),
 ])
 
 # ── Conclusion ──
 add_section('Conclusion', [
-    ('By decoupling keyword extraction from span resolution and applying rule-based negation filtering, MedTator 2.0 provides LLM-assisted pre-annotation while keeping all clinical data on-device. The platform is being prepared for Electron-based desktop packaging to enable fully offline clinical annotation workflows. Source code is publicly available at [repository URL].', False, False),
+    ('By decoupling keyword extraction from span resolution and applying rule-based negation filtering, MedGenie provides LLM-assisted pre-annotation while keeping all clinical data on-device. The platform is being prepared for Electron-based desktop packaging to enable fully offline clinical annotation workflows. Source code is publicly available at https://github.com/PittNAIL/MedTator.git.', False, False),
 ])
 
 # ── Save ──

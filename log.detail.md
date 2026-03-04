@@ -1650,3 +1650,102 @@ if (hasSameTagOverlap) continue
 | `utils/auto-annotate.ts` | 修改：getSpanFromTag + hasSameTagOverlap dedup |
 
 ---
+
+## Session 7.4 — UI 打磨 + Abort + RelationLines 修复 (2026-03-03)
+
+### 提交 c0ac9b9 — UI polish: filename truncation + Ollama model cloud tag
+
+#### 1. Annotation.tsx：文件名截断
+
+新增 `truncateFilename` 工具函数：
+```typescript
+const truncateFilename = (name: string, maxLen = 20) => {
+  if (name.length <= maxLen) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? name.slice(dot) : ''
+  return name.slice(0, maxLen - ext.length) + '...' + ext
+}
+```
+- Annotation dropzone 区域用 `<Tooltip>` 包裹，hover 显示完整文件名
+- Drop Annotation 文字的 `<br />` 换行改为 `<span>` flex 容器，修复布局间距
+
+#### 2. ollama-client.ts：远程模型识别
+
+`listModels` 返回值从 `string[]` 改为 `OllamaModelInfo[]`：
+```typescript
+export interface OllamaModelInfo {
+  name: string
+  isRemote: boolean  // 基于 Ollama API 的 remote_model 字段
+}
+```
+- 远程模型在 Settings Modal 的 Select 中显示 `<CloudOutlined />` 云图标 + 灰色文字
+- Test Connection 成功后，若当前模型不在列表中，自动切到第一个可用模型
+- 默认模型从 `mistral:latest` 改为 `qwen3:8b`
+
+---
+
+### 提交 ce7af94 — M7 LLM: Add abort functionality + RelationLines render fix
+
+#### 1. store.ts：LLM 标注中止
+
+新增 `cancelAutoAnnotate` action + `AbortController` 生命周期管理：
+```typescript
+// autoAnnotate() 内部
+const abortController = new AbortController()
+;(get() as any)._annotateAbortController = abortController
+// ...
+const llmResult = await requestAutoAnnotation(config, text, etags, abortController.signal)
+// finally 块清理
+;(get() as any)._annotateAbortController = null
+
+// cancelAutoAnnotate
+cancelAutoAnnotate: () => {
+  const ctrl = (get() as any)._annotateAbortController as AbortController | null
+  ctrl?.abort()
+}
+```
+用 `(get() as any)._annotateAbortController` 存储引用，避免在 AppState 接口中暴露内部实现。
+
+#### 2. ollama-client.ts：AbortSignal 透传
+
+`requestAutoAnnotation` 签名新增 `signal?: AbortSignal`，直接传入 `fetch`：
+```typescript
+const resp = await fetch(`${config.baseUrl}/api/chat`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  signal,  // 新增
+  body: JSON.stringify({ ... }),
+})
+```
+
+#### 3. Annotation.tsx：UI 变化
+
+- Annotate 按钮加宽 `width: 110`，标注中显示 "Annotating..."
+- Settings 按钮在标注进行中变为红色 Cancel 按钮（`<CloseOutlined />`）
+- 中止后 catch `AbortError`，提示 "Auto-annotation cancelled"
+- 移除 Help 工具栏组（Sample/Schema/Wiki 三个占位按钮）
+
+#### 4. RelationLines.tsx：渲染时序修复
+
+- 单帧 RAF → **双帧 RAF**：CM6 dispatch 后第一帧 DOM 可能还没更新，第二帧才稳定
+```typescript
+raf1 = requestAnimationFrame(() => {
+  raf2 = requestAnimationFrame(() => {
+    calculateLines()
+  })
+})
+return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+```
+- 依赖数组加入 `displayMode`，切换 text/sentence 模式时自动重算连线坐标
+
+#### 5. quantum_test/：评测脚本
+
+- `eval_3samples.py`：3 个样本的批量评测
+- `eval_quick.py`：快速单样本评测
+- `check_negated.py`：否定检测调试脚本
+
+### 验证
+
+- ✅ build 零错误，45 测试通过
+
+---
