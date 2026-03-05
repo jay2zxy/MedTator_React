@@ -152,12 +152,3 @@ vpp_data_DELI.json
 
 # Windows special device name (created by mistake)
 nul
-
-# Local dev docs (not for upload)
-CLAUDE.md
-repo.md
-log.md
-log.detail.md
-learn.md
-reload.md
-quantum_test/quantum.md
