@@ -689,6 +689,36 @@ LLM 工程
 
 ---
 
+### 2026-03-06 - Session 8.1 M8: Electron 桌面打包
+
+**模型**: Opus 4.6
+
+**新增文件**：
+- `electron/main.cjs` (~35行)：Electron 主进程，开发加载 localhost:5173，生产加载 dist/index.html
+- `electron/preload.cjs` (~5行)：预加载脚本，暴露 `electronAPI.isElectron`
+
+**修改文件**：
+- `package.json`：
+  - 版本 0.0.0 → 1.0.0
+  - 添加 `"main": "electron/main.cjs"` 入口
+  - 新增脚本：`electron:dev`（concurrently + wait-on）、`electron:build`（tsc + vite + electron-builder）
+  - 添加 `"build"` 配置（appId/productName/nsis/files）
+  - 所有 dependencies → devDependencies（Vite 已打包，运行时不需要 node_modules）
+  - 安装 electron、electron-builder、concurrently、wait-on
+- `vite.config.ts`：添加 `base: './'`（Electron file:// 协议需要相对路径）
+
+**打包结果**：
+- `release/win-unpacked/` — 332MB（免安装版，含 MedGenie.exe）
+- `release/MedGenie Setup 1.0.0.exe` — 93MB（NSIS 安装包）
+
+**遇到的问题**：
+- winCodeSign 符号链接错误 → 开启 Windows 开发者模式解决
+- node_modules 被打包进 asar（96MB 膨胀）→ dependencies 全移到 devDependencies + files 排除
+
+**验证**：编译零错误，72 个测试通过，Electron 窗口运行正常
+
+---
+
 ### 项目总进度（更新）
 
 | 模块 | 状态 | 提交 |
@@ -700,9 +730,9 @@ LLM 工程
 | M5 Schema Editor | ✅ 完成 | 0ac5eb2 |
 | M6 功能 Tab (5 Phase) | ✅ 完成 | 5c31721 → 845e9d4 |
 | M7 LLM 自动标注 | ✅ 完成 | 8f37861 → ce7af94 |
-| M8 Electron 打包 | ⏸ 待开始 | |
+| M8 Electron 打包 | ✅ 完成 | 待提交 |
 | M9 联调修 bug | ⏸ 待开始 | |
 
-**下一步**：M8 Electron 桌面打包 或 M9 联调修 bug
+**下一步**：M9 联调修 bug / 上传 .exe 到 GitHub Release v1.0.0
 
-*最后更新: 2026-03-04*
+*最后更新: 2026-03-06*
