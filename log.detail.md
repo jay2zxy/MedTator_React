@@ -1842,3 +1842,146 @@ MedGenie/                          ← 外层（开发仓库）
 6. **工作流**：大仓库开发 → 小仓库单向同步，不会在小仓库直接修改
 
 ---
+
+## Session 8.1 — M8 Electron 桌面打包 (2026-03-06)
+
+**时间**: 2026-03-06
+**模型**: Opus 4.6
+
+### 背景
+
+M1-M7 全部完成，需要将 React 应用打包为 Windows 桌面应用（.exe），上传到 GitHub Release（https://github.com/PittNAIL/MedGenie/releases/tag/v1.0.0）。
+
+### 1. Electron 架构设计
+
+**两个进程模型**：
+
+```
+┌─────────────────────────────────────────┐
+│  主进程 (electron/main.cjs)              │  ← Node.js 环境
+│  - 创建 BrowserWindow                    │
+│  - 管理应用生命周期                       │
+├─────────────────────────────────────────┤
+│  渲染进程 (dist/index.html)              │  ← Chromium 浏览器
+│  - Vite 构建的 React 应用                │
+└─────────────────────────────────────────┘
+```
+
+**为什么用 `.cjs` 而不是 `.ts`**：
+- `package.json` 设置了 `"type": "module"`，`.js` 文件默认走 ESM
+- Electron 主进程对 ESM 支持不完善，用 `.cjs` 强制 CommonJS，避免兼容问题
+- 主进程代码很少（~35行），不需要 TypeScript 编译
+
+**开发模式 vs 生产模式**：
+```js
+const isDev = !app.isPackaged;
+if (isDev) {
+  win.loadURL('http://localhost:5173');   // 加载 Vite 热更新服务器
+} else {
+  win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));  // 加载构建产物
+}
+```
+
+### 2. Vite 配置修改
+
+```js
+base: './'
+```
+
+- Vite 默认 `base: '/'` → 生成 `<script src="/assets/index.js">`
+- Electron 用 `file://` 协议加载本地文件 → `/assets/...` 指向磁盘根目录，404
+- 改成 `'./'` → 生成 `<script src="./assets/index.js">`，相对路径，正确加载
+
+### 3. package.json 配置
+
+**关键字段**：
+```json
+{
+  "main": "electron/main.cjs",           // Electron 入口
+  "build": {
+    "files": ["dist/**/*", "electron/**/*", "!node_modules/**/*"],
+    "win": { "target": "nsis" },          // Windows 安装包
+    "nsis": { "oneClick": false }         // 允许选择安装目录
+  }
+}
+```
+
+**开发脚本**：
+```json
+"electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\""
+```
+- `concurrently`：同时启动 Vite 和 Electron
+- `wait-on`：等 Vite 就绪后再启动 Electron，避免加载空白页
+
+### 4. 遇到的问题
+
+#### 问题 1：winCodeSign 符号链接错误
+
+```
+ERROR: Cannot create symbolic link : 客户端没有所需的特权
+C:\Users\del\AppData\Local\electron-builder\Cache\winCodeSign\...\libcrypto.dylib
+```
+
+**原因**：`electron-builder` 下载 winCodeSign 工具后用 7-Zip 解压，归档中含有 macOS 的 symlink（`.dylib`），Windows 默认不允许普通用户创建符号链接。
+
+**解决**：
+1. 打开 Windows **设置 → 更新和安全 → 开发者选项**
+2. 开启 **开发人员模式**（Developer Mode）
+3. 清除损坏缓存：`rm -rf ~/AppData/Local/electron-builder/Cache/winCodeSign`
+4. 重新打包
+
+> 开发人员模式允许普通用户创建符号链接（Windows 10 1703+ 特性），不需要管理员权限运行。
+
+#### 问题 2：node_modules 被打包进 asar（96MB 膨胀）
+
+首次打包 `win-unpacked/` 达到 425MB，其中 `resources/app.asar` 占 96MB。
+
+**原因**：`electron-builder` 默认会扫描 `dependencies`（非 `devDependencies`）并打包进 asar。虽然 `files` 配置只指定了 `dist/` 和 `electron/`，但 `dependencies` 里的 node_modules 仍会被额外包含。
+
+**解决**：将所有 `dependencies` 移到 `devDependencies`。
+
+理由：Vite 已将所有前端代码（React/Antd/CodeMirror 等）打包到 `dist/assets/index.js`（1.5MB），Electron 运行时只需加载这个文件，完全不需要 node_modules。
+
+```json
+// 修改前：dependencies 有 12 个包 → electron-builder 全部打包
+"dependencies": { "react": "...", "antd": "...", ... }
+
+// 修改后：全部移到 devDependencies → electron-builder 不打包
+"dependencies": {}
+"devDependencies": { "react": "...", "antd": "...", ... }
+```
+
+**效果**：
+- `win-unpacked/`：425MB → 332MB（减少 93MB）
+- `resources/app.asar`：96MB → ~2MB（只含 dist/ + electron/）
+
+#### 问题 3：打包体积仍有 332MB
+
+这是 Electron 的固有成本，无法避免：
+
+| 部分 | 大小 | 说明 |
+|---|---|---|
+| MedGenie.exe | 204MB | Chromium 引擎 + Node.js + V8 |
+| locales/ | 46MB | Chromium 多语言包 |
+| dxcompiler.dll | 25MB | DirectX 着色器编译器 |
+| 其他 DLL | ~27MB | 音视频/GPU 相关 |
+| resources/app.asar | ~2MB | 实际应用代码 |
+
+> 所有 Electron 应用都这么大（VS Code ~500MB、Slack ~300MB）。NSIS 安装包压缩后 93MB，可接受。
+
+### 5. 最终产物
+
+| 文件 | 大小 | 说明 |
+|---|---|---|
+| `release/win-unpacked/` | 332MB | 免安装版（portable） |
+| `release/MedGenie Setup 1.0.0.exe` | 93MB | NSIS 安装包 |
+
+### 6. 验证
+
+- `npm run build`：TypeScript 编译零错误
+- `npm test`：72 个测试全部通过
+- `npm run electron:dev`：Electron 窗口正常显示，热更新正常
+- `MedGenie Setup 1.0.0.exe`：安装后运行正常
+- `win-unpacked/MedGenie.exe`：免安装直接运行正常
+
+---
