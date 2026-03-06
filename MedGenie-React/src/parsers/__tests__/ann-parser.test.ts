@@ -3,6 +3,7 @@ import {
   xml2ann, ann2xml, xml2str, txt2ann,
   span2loc, loc2span, getLocs,
   anns2hintDict, searchHintsInAnn, hash,
+  getNextTagId, getTagByTagId, getLinkedRtags,
 } from '../ann-parser'
 import { parseDtd } from '../dtd-parser'
 
@@ -94,5 +95,34 @@ describe('ann-parser', () => {
   it('hash is consistent', () => {
     expect(hash('hello')).toBe(hash('hello'))
     expect(hash('hello')).not.toBe(hash('world'))
+  })
+
+  it('getNextTagId auto-increments by id_prefix across tag types', () => {
+    const dtd = parseDtd(DTD_TEXT)
+    const ann = xml2ann(XML, dtd)
+    // ann has A0, S0, L0
+    expect(getNextTagId(ann, { name: 'AE', id_prefix: 'A' })).toBe('A1')
+    expect(getNextTagId(ann, { name: 'SVRT', id_prefix: 'S' })).toBe('S1')
+    // Shared prefix collision: both LK_AE_SVRT (L0) uses prefix "L"
+    // A new tag type with prefix "L" should get L1, not L0
+    expect(getNextTagId(ann, { name: 'OTHER', id_prefix: 'L' })).toBe('L1')
+  })
+
+  it('getTagByTagId finds tag or returns null', () => {
+    const dtd = parseDtd(DTD_TEXT)
+    const ann = xml2ann(XML, dtd)
+    expect(getTagByTagId('A0', ann)?.tag).toBe('AE')
+    expect(getTagByTagId('MISSING', ann)).toBeNull()
+  })
+
+  it('getLinkedRtags finds relation tags referencing an entity', () => {
+    const dtd = parseDtd(DTD_TEXT)
+    const ann = xml2ann(XML, dtd)
+    // L0 links A0 and S0
+    const linked = getLinkedRtags('A0', ann)
+    expect(linked.length).toBe(1)
+    expect(linked[0].id).toBe('L0')
+    // Unlinked entity
+    expect(getLinkedRtags('MISSING', ann)).toHaveLength(0)
   })
 })

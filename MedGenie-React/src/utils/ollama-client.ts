@@ -41,7 +41,7 @@ export interface LlmAnnotation {
  * Robustly extract a JSON object from arbitrary LLM output.
  * Handles: <think> blocks, unclosed <think>, markdown fences, surrounding text.
  */
-function extractJson(raw: string): any {
+export function extractJson(raw: string): any {
   // 1. Strip closed <think>...</think> blocks (Qwen 3, DeepSeek-R1, etc.)
   let text = raw.replace(/<think>[\s\S]*?<\/think>/g, '')
   // 2. Strip unclosed <think> (model cut off or never closed)
