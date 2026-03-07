@@ -20,7 +20,7 @@
 
 ---
 
-## 项目状态（截至 2026-03-06）
+## 项目状态（截至 2026-03-07）
 
 | 模块 | 状态 | 提交 |
 |------|------|------|
@@ -149,6 +149,13 @@ startLinking(rtagDef, firstEntityId) → isLinking=true
 - 所有依赖必须在 `devDependencies`（Vite 已打包，否则 electron-builder 会把 node_modules 塞进 asar）
 - Windows 首次打包需开启「开发人员模式」（winCodeSign 解压 symlink 权限）
 - 上传目标：https://github.com/PittNAIL/MedGenie/releases/tag/v1.0.0
+
+### GitHub Actions CI
+- `.github/workflows/build.yml`（外层 + 内层仓库各一份）
+- `workflow_dispatch` 手动触发，可选平台：all / mac / win / linux
+- 三个 job 并行：macOS-latest（.dmg）、windows-latest（.exe）、ubuntu-latest（.AppImage）
+- Node 22（`@electron/rebuild` 要求 >= 22.12.0）
+- 产物存为 Artifact，从 Actions 页面下载
 
 ---
 

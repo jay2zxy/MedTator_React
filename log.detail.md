@@ -1985,3 +1985,54 @@ C:\Users\del\AppData\Local\electron-builder\Cache\winCodeSign\...\libcrypto.dyli
 - `win-unpacked/MedGenie.exe`：免安装直接运行正常
 
 ---
+
+## Session 8.2 — GitHub Actions CI: 跨平台 Electron 打包 (2026-03-07, Opus 4.6)
+
+### 背景
+
+M8 只在本地 Windows 打包，需要 macOS/Linux 构建能力。用户没有 Mac，选择 GitHub Actions 方案。
+
+### 新增文件
+
+**`.github/workflows/build.yml`**（外层仓库）：
+- `workflow_dispatch` 手动触发，下拉选择平台（all/mac/win/linux）
+- 外层仓库用 `defaults.run.working-directory: MedGenie-React`（package.json 在子目录）
+- `upload-artifact` 路径对应调整为 `MedGenie-React/release/*`
+
+**`MedGenie-React/.github/workflows/build.yml`**（内层仓库）：
+- 同样的 workflow，无 working-directory（package.json 在根目录）
+
+### Workflow 结构
+
+```yaml
+on: workflow_dispatch (选择 platform: all/mac/win/linux)
+
+jobs:
+  build-mac:    # macos-latest → npm run electron:build:mac → *.dmg, *.zip
+  build-win:    # windows-latest → npm run electron:build → *.exe
+  build-linux:  # ubuntu-latest → npm run electron:build:linux → *.AppImage
+```
+
+三个 job 用 `if` 条件控制，选 "all" 时并行执行。
+
+### Node 版本问题
+
+初始写了 Node 20（LTS），GitHub Actions 运行时报错：
+```
+npm warn EBADENGINE @electron/rebuild@4.0.3 required: { node: '>=22.12.0' }
+```
+
+修复：`node-version: 20` → `22`。
+
+### 产物说明
+
+- 构建产物存为 GitHub Actions **Artifact**（非 Release）
+- 从 Actions → 某次运行 → 底部 Artifacts 下载
+- Artifact 默认 90 天过期，正式发布需手动上传到 Releases 页面
+
+### 提交
+
+- `f69b8ed` — Add GitHub Actions workflow for cross-platform Electron builds
+- `8697978` — Fix workflow Node version: 20 -> 22 (required by @electron/rebuild)
+
+---
