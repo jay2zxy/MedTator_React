@@ -20,7 +20,7 @@
 
 ---
 
-## 项目状态（截至 2026-03-03）
+## 项目状态（截至 2026-03-06）
 
 | 模块 | 状态 | 提交 |
 |------|------|------|
@@ -31,7 +31,7 @@
 | M5 Schema Editor | ✅ | 0ac5eb2 |
 | M6 其他 Tab（Statistics/Export/Converter/IAA/Toolkit） | ✅ | 5c31721→845e9d4 |
 | M7 LLM 自动标注（Ollama） | ✅ | 8f37861→ce7af94 |
-| M8 Electron 打包 | ⏸ 待开始 | |
+| M8 Electron 打包 | ✅ | cd578ee |
 | M9 联调修 bug | ⏸ 待开始 | |
 
 ---
@@ -135,29 +135,21 @@ startLinking(rtagDef, firstEntityId) → isLinking=true
 
 ---
 
-## 下一步（M8：Electron 桌面打包）
+## M8 Electron 打包（已完成）
 
-**目标**：将 React 应用打包为 `.exe`，上传到 GitHub Release（https://github.com/PittNAIL/MedGenie/releases/tag/v1.0.0，当前为 init 状态）
+**产物**：`release/MedGenie Setup 1.0.0.exe`（93MB NSIS 安装包）+ `release/win-unpacked/`（332MB 免安装版）
 
-### Phase 1：Electron 集成
-- 安装 `electron` + `electron-builder`（或 `electron-vite`）
-- 创建 `electron/main.ts`：主进程，加载 Vite 输出的 `index.html`
-- 创建 `electron/preload.ts`：预加载脚本（ipcMain/ipcRenderer 桥接）
-- 配置 `vite.config.ts` 兼容 Electron（base path、output 目录）
-- 开发模式：Electron 窗口加载 `localhost:5173`
-
-### Phase 2：文件系统（可选）
-- 当前方案：浏览器 `<input type="file">` + 拖拽，已可用
-- Electron 方案：通过 IPC 调用 Node.js `fs`（原生文件对话框、直接读写磁盘）
-- 优先级低：input 方案够用，仅在需要"保存到原路径"功能时再做
-
-### Phase 3：打包发布
-- `electron-builder` 配置：appId、productName、icon、nsis installer
-- 打包 `.exe`（Windows）— 优先
-- 可选：`.dmg`（macOS）/ `.AppImage`（Linux）
-- 上传 `.exe` 到 GitHub Release v1.0.0
+### 关键文件
+- `electron/main.cjs`：主进程（dev 加载 localhost:5173，production 加载 dist/index.html）
+- `electron/preload.cjs`：预加载脚本（暴露 `electronAPI.isElectron`）
+- `package.json`：`"main": "electron/main.cjs"` + `"build"` 配置 + electron:dev/build 脚本
+- `vite.config.ts`：`base: './'`（file:// 协议需要相对路径）
 
 ### 注意事项
-- Ollama API（localhost:11434）在桌面端同样可用，无需特殊处理
-- CSP 策略：Electron 默认限制较严，需配置允许 localhost 请求
-- 打包体积：排除 devDependencies，关注最终 `.exe` 大小
+- 所有依赖必须在 `devDependencies`（Vite 已打包，否则 electron-builder 会把 node_modules 塞进 asar）
+- Windows 首次打包需开启「开发人员模式」（winCodeSign 解压 symlink 权限）
+- 上传目标：https://github.com/PittNAIL/MedGenie/releases/tag/v1.0.0
+
+---
+
+## 下一步（M9：联调修 bug）

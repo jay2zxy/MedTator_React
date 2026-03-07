@@ -7,7 +7,14 @@ MedGenie/                          ← 外层（开发仓库）
 ├── .git/                          ← 指向 jay2zxy/MedTator_React.git
 ├── MedGenie-React/                ← 内层（成品仓库）
 │   ├── .git/                      ← 指向 PittNAIL/MedGenie.git
-│   └── src/...
+│   ├── src/...                    ← React 源码
+│   ├── dist/                      ← Vite 构建输出（git ignored）
+│   ├── electron/                  ← Electron 主进程 + 预加载脚本
+│   │   ├── main.cjs               ← 创建窗口、加载页面
+│   │   └── preload.cjs            ← contextBridge 暴露 API
+│   └── release/                   ← electron-builder 输出（git ignored）
+│       ├── win-unpacked/          ← 免安装版（Chromium + app.asar）
+│       └── MedGenie Setup x.x.x.exe  ← NSIS 安装包
 ├── docs/
 ├── sample/
 ├── scripts/
@@ -71,6 +78,40 @@ git push -u origin jay-dev-release
 - **推送成品**：在 `MedGenie-React/` 下 `git push`，推到 PittNAIL/MedGenie
 - **推送开发记录**：在 `MedGenie/` 下 `git push`，推到 jay2zxy/MedTator_React
 - **发布流程**：`jay-dev-release` → PR merge 到 `master`
+
+## Electron 打包（M8）
+
+### 架构
+
+```
+用户双击 MedGenie.exe
+  → Chromium 引擎启动（dll 们 + locales）
+  → Node.js 主进程读取 app.asar
+  → 执行 electron/main.cjs → 创建 BrowserWindow
+  → 加载 preload.cjs → 注入 electronAPI
+  → 加载 dist/index.html → React 应用运行
+```
+
+### 构建产物
+
+| 文件 | 说明 |
+|------|------|
+| `release/win-unpacked/MedGenie.exe` | ~214MB，内嵌 Chromium + Node.js |
+| `release/win-unpacked/resources/app.asar` | ~1.5MB，你的代码（dist/ + electron/） |
+| `release/win-unpacked/locales/` | ~45MB，Chromium 多语言包 |
+| `release/MedGenie Setup 1.0.0.exe` | ~93MB，NSIS 安装包（压缩后） |
+
+### 开发命令
+
+```bash
+npm run electron:dev    # Vite + Electron 同时启动（开发模式）
+npm run electron:build  # tsc + vite build + electron-builder --win
+```
+
+### 已知问题
+
+- **Windows 符号链接权限**：首次打包需开启「开发人员模式」（设置 → 更新和安全 → 开发者选项），否则 winCodeSign 解压报错。或用管理员终端运行。
+- **打包体积**：所有依赖必须在 `devDependencies`（Vite 已打包进 dist），否则 electron-builder 会把 node_modules 塞进 asar。
 
 ## 注意事项
 

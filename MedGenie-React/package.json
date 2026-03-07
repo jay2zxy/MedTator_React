@@ -2,6 +2,8 @@
   "name": "medgenie-react",
   "private": true,
   "version": "1.0.0",
+  "description": "MedGenie - Medical Text Annotation Tool",
+  "author": "Jay Zeng",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

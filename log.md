@@ -730,7 +730,7 @@ LLM 工程
 | M5 Schema Editor | ✅ 完成 | 0ac5eb2 |
 | M6 功能 Tab (5 Phase) | ✅ 完成 | 5c31721 → 845e9d4 |
 | M7 LLM 自动标注 | ✅ 完成 | 8f37861 → ce7af94 |
-| M8 Electron 打包 | ✅ 完成 | 待提交 |
+| M8 Electron 打包 | ✅ 完成 | cd578ee |
 | M9 联调修 bug | ⏸ 待开始 | |
 
 **下一步**：M9 联调修 bug / 上传 .exe 到 GitHub Release v1.0.0
