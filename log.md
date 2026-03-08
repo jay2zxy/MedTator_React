@@ -735,4 +735,21 @@ LLM 工程
 
 **下一步**：M9 联调修 bug / 上传 .exe 到 GitHub Release v1.0.0
 
-*最后更新: 2026-03-06*
+---
+
+### 2026-03-07 - GitHub Actions CI: 跨平台 Electron 打包
+
+**新增文件**：
+- `.github/workflows/build.yml`（外层仓库）
+- `MedGenie-React/.github/workflows/build.yml`（内层仓库）
+
+**Workflow 设计**：
+- 触发方式：`workflow_dispatch`（手动触发，可选平台）
+- 平台选项：all / mac / win / linux（三个 job 并行）
+- 构建环境：macOS-latest（.dmg）、windows-latest（.exe）、ubuntu-latest（.AppImage）
+- Node 版本：22（`@electron/rebuild` 要求 >= 22.12.0）
+- 产物：`actions/upload-artifact` 存储，从 Actions 页面下载
+
+**提交**：f69b8ed + 8697978（Node 版本修复 20 → 22）
+
+*最后更新: 2026-03-07*
