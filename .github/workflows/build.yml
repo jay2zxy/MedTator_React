@@ -19,7 +19,20 @@ defaults:
     working-directory: MedGenie-React
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: MedGenie-React/package-lock.json
+      - run: npm ci
+      - run: npm test -- --run
+
   build-mac:
+    needs: test
     if: ${{ inputs.platform == 'mac' || inputs.platform == 'all' }}
     runs-on: macos-latest
     steps:
@@ -27,6 +40,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: MedGenie-React/package-lock.json
       - run: npm ci
       - run: npm run electron:build:mac
       - uses: actions/upload-artifact@v4
@@ -37,6 +52,7 @@ jobs:
             MedGenie-React/release/*.zip
 
   build-win:
+    needs: test
     if: ${{ inputs.platform == 'win' || inputs.platform == 'all' }}
     runs-on: windows-latest
     steps:
@@ -44,6 +60,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: MedGenie-React/package-lock.json
       - run: npm ci
       - run: npm run electron:build
       - uses: actions/upload-artifact@v4
@@ -53,6 +71,7 @@ jobs:
             MedGenie-React/release/*.exe
 
   build-linux:
+    needs: test
     if: ${{ inputs.platform == 'linux' || inputs.platform == 'all' }}
     runs-on: ubuntu-latest
     steps:
@@ -60,6 +79,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: MedGenie-React/package-lock.json
       - run: npm ci
       - run: npm run electron:build:linux
       - uses: actions/upload-artifact@v4
