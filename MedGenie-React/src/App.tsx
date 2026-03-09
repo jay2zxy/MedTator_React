@@ -21,11 +21,20 @@ function App() {
   const currentTab = useAppStore((s) => s.currentTab)
   const TabContent = tabComponents[currentTab]
 
-  // Warn before unload if there are unsaved annotation files
+  // Warn before closing if there are unsaved annotation files
   useEffect(() => {
+    const isElectron = !!(window as any).electronAPI?.isElectron
+    const hasUnsaved = () => useAppStore.getState().anns.some(a => !a._has_saved)
+
+    if (isElectron) {
+      // Expose checker for Electron main process (executeJavaScript)
+      ;(window as any).__hasUnsavedAnns = hasUnsaved
+      return () => { delete (window as any).__hasUnsavedAnns }
+    }
+
+    // Browser: use beforeunload
     const handler = (e: BeforeUnloadEvent) => {
-      const hasUnsaved = useAppStore.getState().anns.some(a => !a._has_saved)
-      if (hasUnsaved) {
+      if (hasUnsaved()) {
         e.preventDefault()
         e.returnValue = 'There are unsaved annotation files. Are you sure you want to leave?'
       }

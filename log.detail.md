@@ -2036,3 +2036,73 @@ npm warn EBADENGINE @electron/rebuild@4.0.3 required: { node: '>=22.12.0' }
 - `8697978` — Fix workflow Node version: 20 -> 22 (required by @electron/rebuild)
 
 ---
+
+## 2026-03-09 - M9 Bug Fix: Electron 关闭窗口卡死
+
+### 问题
+
+有未保存的标注文件（红色 `*` 星号）时，点击 Electron 桌面版的窗口关闭按钮（X），窗口完全无反应，无法关闭。
+
+### 根因分析
+
+`App.tsx` 中通过 `window.addEventListener('beforeunload', handler)` 监听关闭事件，`handler` 内调用 `e.preventDefault()` + 设置 `e.returnValue`。
+
+- **浏览器环境**：`beforeunload` + `preventDefault()` 会触发浏览器内置的确认对话框（"Leave site?"），用户可选择离开或留下。
+- **Electron 环境**：`beforeunload` + `preventDefault()` 同样会阻止窗口关闭，但 Electron **不会**弹出任何确认对话框。结果就是窗口关闭被阻止，用户无法操作，只能强杀进程。
+
+### 修复方案
+
+将 Electron 环境的关闭确认逻辑从渲染进程（`beforeunload`）迁移到主进程（`win.on('close')`）。
+
+**`electron/main.cjs`**（+20行）：
+
+```javascript
+win.on('close', async (e) => {
+  e.preventDefault();
+  const hasUnsaved = await win.webContents.executeJavaScript(
+    'window.__hasUnsavedAnns ? window.__hasUnsavedAnns() : false'
+  );
+  if (hasUnsaved) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Close without Saving', 'Cancel'],
+      defaultId: 1,
+      title: 'Unsaved Changes',
+      message: 'There are unsaved annotation files. Close anyway?',
+    });
+    if (response === 0) win.destroy();
+    // Cancel → do nothing
+  } else {
+    win.destroy();
+  }
+});
+```
+
+关键点：
+- 用 `e.preventDefault()` 拦截关闭，然后用 `dialog.showMessageBox()` 弹原生对话框
+- 用 `win.destroy()`（而非 `win.close()`）绕过 `close` 事件递归
+- 通过 `executeJavaScript` 调用渲染进程暴露的函数，无需 IPC 通道
+
+**`src/App.tsx`**（修改 `useEffect`）：
+
+```typescript
+const isElectron = !!(window as any).electronAPI?.isElectron
+const hasUnsaved = () => useAppStore.getState().anns.some(a => !a._has_saved)
+
+if (isElectron) {
+  // Expose checker for main process
+  ;(window as any).__hasUnsavedAnns = hasUnsaved
+  return () => { delete (window as any).__hasUnsavedAnns }
+}
+
+// Browser: keep original beforeunload behavior
+```
+
+Electron 环境下不再注册 `beforeunload`（避免阻止关闭），改为在 `window` 上挂载 `__hasUnsavedAnns` 函数供主进程查询。浏览器环境保持原有行为不变。
+
+### 验证
+
+- ✅ TypeScript 编译零错误
+- ✅ 72 个测试全部通过
+
+---
