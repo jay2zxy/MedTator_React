@@ -752,4 +752,18 @@ LLM 工程
 
 **提交**：f69b8ed + 8697978（Node 版本修复 20 → 22）
 
-*最后更新: 2026-03-07*
+---
+
+### 2026-03-09 - M9 Bug Fix: Electron 关闭窗口卡死
+
+**问题**：有未保存标注（红色星号）时，点击 Electron 窗口关闭按钮无反应，窗口无法关闭。
+
+**原因**：`App.tsx` 的 `beforeunload` 事件调用 `e.preventDefault()` 阻止关闭，但 Electron 不像浏览器那样弹出原生确认对话框，导致窗口永远关不掉。
+
+**修复（2 个文件）**：
+- `electron/main.cjs`：监听窗口 `close` 事件，通过 `executeJavaScript` 调用渲染进程的 `window.__hasUnsavedAnns()`，有未保存文件时弹出原生对话框（Close without Saving / Cancel）
+- `src/App.tsx`：Electron 环境下注册 `window.__hasUnsavedAnns` 供主进程查询，不再使用 `beforeunload`；浏览器环境保持原有行为不变
+
+**验证**：编译零错误，72 个测试通过
+
+*最后更新: 2026-03-09*
