@@ -766,4 +766,33 @@ LLM 工程
 
 **验证**：编译零错误，72 个测试通过
 
-*最后更新: 2026-03-09*
+---
+
+### 2026-03-11 - GitHub Release: AppImage 上传
+
+**问题**：GitHub Web UI 上传 Linux AppImage 文件失败，报错 "Something went really wrong, and we can't process that file"。.exe 和 .dmg 正常上传。
+
+**原因**：GitHub Web UI 对 ELF 二进制文件（AppImage）处理有 bug，非文件损坏问题（`file` 命令确认为正常 ELF 64-bit 可执行文件，112MB）。
+
+**解决方案**：使用 GitHub CLI 上传
+```bash
+# 安装（Windows）
+winget install GitHub.cli
+
+# 登录（Git Bash 的 MinTTY 不支持交互式提示，需加参数或用 PowerShell）
+gh auth login --web -p https
+
+# 上传
+gh release upload v1.0.0 "MedGenie-1.0.0.AppImage" --repo PittNAIL/MedGenie
+```
+
+**踩坑**：
+- Git Bash (MinTTY) 运行 `gh auth login` 报 "Incorrect function" → 加 `--web -p https` 或改用 PowerShell
+- Claude Code 环境上传报 TLS bad record MAC → 改用 PowerShell 直连成功
+
+**Release v1.0.0 最终资产**：
+- ✅ MedGenie.Setup.1.0.0.exe (92.3 MB) — Windows
+- ✅ MedGenie-1.0.0-arm64.dmg (107.22 MB) — macOS
+- ✅ MedGenie-1.0.0.AppImage (112 MB) — Linux
+
+*最后更新: 2026-03-11*

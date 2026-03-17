@@ -1,0 +1,96 @@
+{
+    "name": "MEDICAL_SYMPTOMS",
+    "etags": [
+        {
+            "name": "SYMPTOM",
+            "description": "Patient-reported symptoms such as pain, fever, cough",
+            "attrs": [
+                {
+                    "name": "certainty",
+                    "vtype": "list",
+                    "values": ["positive", "negated", "possible"],
+                    "default_value": "positive"
+                },
+                {
+                    "name": "severity",
+                    "vtype": "list",
+                    "values": ["mild", "moderate", "severe"],
+                    "default_value": ""
+                },
+                {
+                    "name": "comment",
+                    "vtype": "text",
+                    "default_value": "NA"
+                }
+            ]
+        },
+        {
+            "name": "MEDICATION",
+            "description": "Medication names including prescription and OTC drugs",
+            "attrs": [
+                {
+                    "name": "dosage",
+                    "vtype": "text",
+                    "default_value": ""
+                },
+                {
+                    "name": "frequency",
+                    "vtype": "text",
+                    "default_value": ""
+                },
+                {
+                    "name": "comment",
+                    "vtype": "text",
+                    "default_value": "NA"
+                }
+            ]
+        },
+        {
+            "name": "DISEASE",
+            "description": "Disease or diagnosis names",
+            "attrs": [
+                {
+                    "name": "status",
+                    "vtype": "list",
+                    "values": ["current", "history", "family_history"],
+                    "default_value": "current"
+                },
+                {
+                    "name": "comment",
+                    "vtype": "text",
+                    "default_value": "NA"
+                }
+            ]
+        }
+    ],
+    "rtags": [
+        {
+            "name": "LK_SYMPTOM_DISEASE",
+            "attrs": [
+                { "name": "SYMPTOM", "vtype": "idref" },
+                { "name": "DISEASE", "vtype": "idref" },
+                {
+                    "name": "relation_type",
+                    "vtype": "list",
+                    "values": ["caused_by", "indicates", "associated_with"],
+                    "default_value": "associated_with"
+                },
+                { "name": "comment", "vtype": "text", "default_value": "NA" }
+            ]
+        },
+        {
+            "name": "LK_MED_DISEASE",
+            "attrs": [
+                { "name": "MEDICATION", "vtype": "idref" },
+                { "name": "DISEASE", "vtype": "idref" },
+                {
+                    "name": "relation_type",
+                    "vtype": "list",
+                    "values": ["treats", "prevents", "worsens"],
+                    "default_value": "treats"
+                },
+                { "name": "comment", "vtype": "text", "default_value": "NA" }
+            ]
+        }
+    ]
+}
