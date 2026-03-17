@@ -167,7 +167,8 @@ function ToolbarRibbon() {
       background: '#fafafa',
       minHeight: 70,
       fontSize: 12,
-      flexWrap: 'wrap',
+      flexWrap: 'nowrap',
+      overflowX: 'auto',
     }}>
       {/* Hidden file inputs */}
       <input
@@ -406,7 +407,6 @@ function ToolbarRibbon() {
           <Radio.Button value="document">Document</Radio.Button>
           <Radio.Button value="sentences">Sentences</Radio.Button>
         </Radio.Group>
-        <Button size="small" style={{ marginLeft: 4 }}>Visualize</Button>
       </ToolbarGroup>
 
       {/* Search */}
@@ -487,7 +487,7 @@ function ToolbarGroup({ label, children }: { label: string; children: React.Reac
       borderRight: '1px solid #e8e8e8',
       gap: 4,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
         {children}
       </div>
       <div style={{ fontSize: 10, color: '#888', whiteSpace: 'nowrap' }}>{label}</div>
